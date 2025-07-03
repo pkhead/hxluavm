@@ -1,0 +1,9 @@
+/lua-*
+/lib
+
+export.c
+*.hdll
+*.hl
+
+.clangd
+.DS_Store
