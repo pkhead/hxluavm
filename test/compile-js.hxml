@@ -1,0 +1,2 @@
+compile-base.hxml
+-js ../luawasm/test/haxe.js

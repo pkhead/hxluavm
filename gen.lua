@@ -12,6 +12,8 @@ local function tfind(t, q)
     return nil
 end
 
+local tinsert = table.insert
+
 -- local function the_haxe_casing_thing(orig)
 --     local upper = string.upper(orig)
 --     local out = {string.lower(string.sub(orig, 1, 1))}
@@ -354,6 +356,7 @@ do
 #include <lualib.h>
 
 #define _LSTATE _ABSTRACT(lua_State)
+#define _NUINT _ABSTRACT(_BYTES)
 
 ]])
 
@@ -365,6 +368,19 @@ import luavm.State;
 import luavm.ThreadStatus;
 import luavm.CString;
 
+#if js
+typedef CFunction = State->Int;
+typedef KFunction = (State,Int,NativeUInt)->Int;
+// typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
+
+enum FunctionType {
+    CFunction;
+    KFunction;
+}
+
+abstract FuncPtr<T:Function>(Int) from Int to Int {}
+
+#else
 @:callable
 private abstract Callable<T:Function>(T) to T {
 	@:from static function fromT<T:Function>(f:T) {
@@ -373,38 +389,93 @@ private abstract Callable<T:Function>(T) to T {
 }
 
 typedef CFunction = Callable<State->Int>;
-typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
-
-extern class LuaNative {
+typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
+// typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
+#end
 ]])
 
     local func_types = {"lua_CFunction"}
 
+    -- 1: hl.h type
+    -- 2: haxe hl type
+    -- 3: haxe js/wasm type
     local haxe_type_mappings = {
-        ["void"] = {"_VOID", "Void"},
-        ["void*"] = {"_BYTES", "hl.Bytes"},
-        ["int"] = {"_I32", "Int"},
-        ["unsigned int"] = {"_I32", "Int"},
-        ["float"] = {"_F32", "Single"},
-        ["double"] = {"_F64", "Float"},
-        ["lua_Number"] = {"_F64", "Float"},
-        ["lua_Integer"] = {"_I64", "haxe.Int64"},
-        ["lua_State*"] = {"_LSTATE", "State"},
-        ["const char*"] = {"_BYTES", "CString"},
-        ["int*"] = {"_REF(_I32)", "hl.Ref<Int>"},
-        ["size_t"] = {"_I64", "haxe.Int64"},
+        ["void"] = {"_VOID", "Void", "Void"},
+        ["void*"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
+        ["int"] = {"_I32", "Int", "Int"},
+        ["unsigned int"] = {"_I32", "Int", "Int"},
+        ["float"] = {"_F32", "Single", "Single"},
+        ["double"] = {"_F64", "Float", "Float"},
+        ["lua_Number"] = {"_F64", "Float", "Float"},
+        ["lua_Integer"] = {"_I64", "haxe.Int64", "haxe.Int64"},
+        ["lua_State*"] = {"_LSTATE", "State", "State"},
+        ["const char*"] = {"_BYTES", "CString", "CString"},
+        ["int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativeUInt"},
+        ["size_t"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
 
-        ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "CFunction"},
-        ["lua_Reader"] = {"_FUN(_BYTES,_LSTATE _BYTES _REF(_I64))", "Reader"}
+        ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "CFunction", "FuncPtr<CFunction>"},
+        ["lua_KFunction"] = {"_FUN(_I32,_LSTATE _I32 _BYTES)", "KFunction", "FuncPtr<KFunction>"},
+        ["lua_KContext"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
+        -- ["lua_Reader"] = {"_FUN(_BYTES,_LSTATE _BYTES _REF(_I64))", "Reader"}
     }
 
     local haxe_trivial_types = {
-        "Void", "Int", "Single", "Float", "State", "CString", "CFunction", "Reader"
+        "Void", "Int", "Single", "Float", "State", "CString", "CFunction", "KFunction"
     }
 
-    local haxe_wrapper_content = {}
+    local hx_js_bindings_source = {[[class LuaNative {
+    public static var vm:Dynamic;
 
-    local function proc_func_defs(funcdefs, haxe_func_prefix)
+    public static function init(cb:()->Void) {
+        js.Syntax.code("LuaVM({}).then((vm) => { {0} = vm; cb(); })", vm);
+    }
+
+    public static function vmAllocString(str:CString):NativeUInt {
+        var bytes = str.toBytes();
+        var ptr = vm._malloc(bytes.length + 1);
+        for (i in 0...bytes.length) {
+            vm.HEAPU8[ptr+i] = bytes.get(i);
+        }
+        vm.HEAPU8[ptr + bytes.length] = 0;
+        return ptr;
+    }
+    
+    static inline function _freeString(ptr:NativeUInt) {
+        vm._free(ptr);
+    }
+
+    public static function vmAllocFuncPtr<T:Function>(func:T, funcType:FunctionType):FuncPtr<T> {
+        return cast vm.addFunction(func, switch (funcType) {
+            case CFunction: "ip";
+            case KFunction: "ipip";
+        });
+    }
+]]
+    }
+    local hx_js_wrapper_content = {}
+
+    local hx_hl_bindings_source = {
+        "extern class LuaNative {\n",
+    }
+    local hx_hl_wrapper_content = {}
+
+    local function proc_func_defs(funcdefs, target)
+        local hx_bindings_source, hx_wrapper_content, target_index
+
+        if target == "js" then
+            target_index = 3
+            hx_bindings_source = hx_js_bindings_source
+            hx_wrapper_content = hx_js_wrapper_content
+        
+        elseif target == "hl" then
+            target_index = 2
+            hx_bindings_source = hx_hl_bindings_source
+            hx_wrapper_content = hx_hl_wrapper_content
+
+        else
+            error("invalid target " .. target)
+        end
+
         -- assert(stream:eof())
         for _, def in ipairs(funcdefs) do
             local haxe_ret = haxe_type_mappings[def.ret]
@@ -416,7 +487,8 @@ extern class LuaNative {
             local haxe_params = {}
             local arg_names = {}
             local param_strs = {}
-            local write_to_haxe_wrapper = tfind(haxe_trivial_types, haxe_ret[2]) ~= nil
+            local write_to_haxe_wrapper = tfind(haxe_trivial_types, haxe_ret[target_index]) ~= nil
+            local write_to_c_source = target == "hl"
 
             for _, arg in ipairs(def.args) do
                 if arg.type == "..." then
@@ -435,7 +507,7 @@ extern class LuaNative {
                     goto skip_this_def
                 end
 
-                if tfind(func_types, arg.type) then
+                if target == "hl" and tfind(func_types, arg.type) then
                     table.insert(arg_names, arg.name .. "->fun")
                     table.insert(param_strs, ("vclosure* %s"):format(arg.name))
                 else
@@ -443,7 +515,7 @@ extern class LuaNative {
                     table.insert(param_strs, ("%s %s"):format(arg.type, arg.name))
                 end
 
-                local haxe_type = map[2]
+                local haxe_type = map[target_index]
                 -- if haxe_type == "hl.Bytes" then
                 --     haxe_type = "LuaString"
                 -- end
@@ -463,49 +535,116 @@ extern class LuaNative {
 
             -- local export_name = string.sub(def.name, string.find(def.name, "_", 1, true)+1, -1)
             local export_name = def.name
-            if haxe_func_prefix then
-                export_name = haxe_func_prefix .. export_name
-            end
 
-            output_c_file:write(("HL_PRIM %s HL_NAME(%s)(%s) {\n"):format(def.ret, export_name, table.concat(param_strs, ", ")))
+            if write_to_c_source then
+                output_c_file:write(("HL_PRIM %s HL_NAME(%s)(%s) {\n"):format(def.ret, export_name, table.concat(param_strs, ", ")))
 
-            if def.impl then
-                output_c_file:write(def.impl)
-            else
-                output_c_file:write("    ")
-                if def.ret ~= "void" then
-                    output_c_file:write("return ")
+                if def.impl then
+                    output_c_file:write(def.impl)
+                else
+                    output_c_file:write("    ")
+                    if def.ret ~= "void" then
+                        output_c_file:write("return ")
+                    end
+                    output_c_file:write(def.name)
+                    output_c_file:write("(")
+                    output_c_file:write(table.concat(arg_names, ", "))
+                    output_c_file:write(");\n")
                 end
-                output_c_file:write(def.name)
-                output_c_file:write("(")
-                output_c_file:write(table.concat(arg_names, ", "))
-                output_c_file:write(");\n")
+
+                output_c_file:write("}\n")
+
+                output_c_file:write("DEFINE_PRIM(")
+                output_c_file:write(haxe_ret[1])
+                output_c_file:write(", ")
+                output_c_file:write(export_name)
+                output_c_file:write(", ")
+                if param_strs[1] == "void" then
+                    output_c_file:write("_NO_ARG")
+                else
+                    output_c_file:write(table.concat(hl_params, " "))
+                end
+                output_c_file:write(")\n\n")
             end
 
-            output_c_file:write("}\n")
+            if target == "hl" then
+                tinsert(hx_bindings_source, "    @:hlNative(\"lua54\", \"")
+                tinsert(hx_bindings_source, export_name)
+                tinsert(hx_bindings_source, "\")\n")
+            end
 
-            output_c_file:write("DEFINE_PRIM(")
-            output_c_file:write(haxe_ret[1])
-            output_c_file:write(", ")
-            output_c_file:write(export_name)
-            output_c_file:write(", ")
-            if param_strs[1] == "void" then
-                output_c_file:write("_NO_ARG")
+            tinsert(hx_bindings_source, "    public static function ")
+            tinsert(hx_bindings_source, def.name)
+            tinsert(hx_bindings_source, "(")
+            tinsert(hx_bindings_source, table.concat(haxe_params, ", "))
+            tinsert(hx_bindings_source, "):")
+
+            if target == "js" and haxe_ret[target_index] == "CString" then
+                tinsert(hx_bindings_source, "NativeUInt")
             else
-                output_c_file:write(table.concat(hl_params, " "))
+                tinsert(hx_bindings_source, haxe_ret[target_index])
             end
-            output_c_file:write(")\n\n")
 
-            output_hx_bindings_file:write("    @:hlNative(\"lua54\", \"")
-            output_hx_bindings_file:write(export_name)
-            output_hx_bindings_file:write("\")\n")
-            output_hx_bindings_file:write("    public static function ")
-            output_hx_bindings_file:write(def.name)
-            output_hx_bindings_file:write("(")
-            output_hx_bindings_file:write(table.concat(haxe_params, ", "))
-            output_hx_bindings_file:write("):")
-            output_hx_bindings_file:write(haxe_ret[2])
-            output_hx_bindings_file:write(";\n")
+            if target == "js" then
+                tinsert(hx_bindings_source, " {\n")
+
+                local param_names = {}
+                local post_call = {}
+                for _, arg in ipairs(def.args) do
+                    local haxe_type = haxe_type_mappings[arg.type][target_index]
+
+                    if haxe_type == "CString" then
+                        tinsert(hx_bindings_source, "        var _")
+                        tinsert(hx_bindings_source, arg.name)
+                        tinsert(hx_bindings_source, " = vmAllocString(")
+                        tinsert(hx_bindings_source, arg.name)
+                        tinsert(hx_bindings_source, ");\n")
+
+                        tinsert(param_names, "_" .. arg.name)
+
+                        tinsert(post_call, "        _freeString(_")
+                        tinsert(post_call, arg.name)
+                        tinsert(post_call, ");\n")
+                    elseif haxe_type == "CFunction" or haxe_type == "KFunction" then
+                        tinsert(hx_bindings_source, "        var _")
+                        tinsert(hx_bindings_source, arg.name)
+                        tinsert(hx_bindings_source, " = _allocFunction(")
+                        tinsert(hx_bindings_source, arg.name)
+                        tinsert(hx_bindings_source, ", ")
+
+                        if haxe_type == "CFunction" then
+                            tinsert(hx_bindings_source, "\"ip\"")
+                        elseif haxe_type == "KFunction" then
+                            tinsert(hx_bindings_source, "\"ipip\"")
+                        else
+                            error("invalid/unsupported function type " .. haxe_type)
+                            end
+
+                        tinsert(hx_bindings_source, ");\n")
+
+                        tinsert(param_names, "_" .. arg.name)
+                    else
+                        tinsert(param_names, arg.name)
+                    end
+                end
+
+                tinsert(hx_bindings_source, "        ")
+                if def.ret ~= "void" then
+                    tinsert(hx_bindings_source, "var _res_ = ")
+                end
+                tinsert(hx_bindings_source, "vm._")
+                tinsert(hx_bindings_source, def.name)
+                tinsert(hx_bindings_source, "(")
+                tinsert(hx_bindings_source, table.concat(param_names, ", "))
+                tinsert(hx_bindings_source, ");\n")
+                tinsert(hx_bindings_source, table.concat(post_call))
+                if def.ret ~= "void" then
+                    tinsert(hx_bindings_source, "        return _res_;\n")
+                end
+                tinsert(hx_bindings_source, "    }\n")
+            else
+                tinsert(hx_bindings_source, ";\n")
+            end
 
             if write_to_haxe_wrapper then
                 local jfeowj = {}
@@ -523,33 +662,43 @@ extern class LuaNative {
                 end
                 local wrapper_name = name_prefix .. string.sub(def.name, string.find(def.name, "_", 1, true)+1, -1)
 
-                table.insert(haxe_wrapper_content, "    public static inline function ")
-                table.insert(haxe_wrapper_content, wrapper_name)
-                table.insert(haxe_wrapper_content, "(")
-                table.insert(haxe_wrapper_content, table.concat(haxe_params, ", "))
-                table.insert(haxe_wrapper_content, ") return LuaNative.")
-                table.insert(haxe_wrapper_content, def.name)
-                table.insert(haxe_wrapper_content, "(")
-                table.insert(haxe_wrapper_content, table.concat(jfeowj, ", "))
-                table.insert(haxe_wrapper_content, ");\n")
+                table.insert(hx_wrapper_content, "    public static inline function ")
+                table.insert(hx_wrapper_content, wrapper_name)
+                table.insert(hx_wrapper_content, "(")
+                table.insert(hx_wrapper_content, table.concat(haxe_params, ", "))
+                table.insert(hx_wrapper_content, ") return LuaNative.")
+                table.insert(hx_wrapper_content, def.name)
+                table.insert(hx_wrapper_content, "(")
+                table.insert(hx_wrapper_content, table.concat(jfeowj, ", "))
+                table.insert(hx_wrapper_content, ");\n")
             end
 
             ::skip_this_def::
         end
+
+        return hx_bindings_source, hx_wrapper_content
     end
 
-    proc_func_defs(funcs1)
-    proc_func_defs(funcs2)
-    proc_func_defs(funcs3)
-
-    if conf.raw_haxe then
-        output_hx_bindings_file:write(conf.raw_haxe)
+    for _, v in ipairs({funcs1, funcs2, funcs3}) do
+        proc_func_defs(v, "hl")
+        proc_func_defs(v, "js")
     end
 
-    output_hx_bindings_file:write("}")
+    output_hx_bindings_file:write("\n#if js\n")
+    output_hx_bindings_file:write(table.concat(hx_js_bindings_source))
+    output_hx_bindings_file:write("}\n#else\n")
+    output_hx_bindings_file:write(table.concat(hx_hl_bindings_source))
+    output_hx_bindings_file:write("}\n#end\n")
+
+    -- if conf.raw_haxe then
+    --     output_hx_bindings_file:write(conf.raw_haxe)
+    -- end
 
     local output_hx_wrapper_file <close> = assert(io.open("lib/luavm/Lua.hx", "w"), "could not open Lua.hx")
-    local hx_wrapper_content = conf.hx_lua_wrapper:gsub("$<AUTOGEN>", table.concat(haxe_wrapper_content))
+    local hx_wrapper_content = conf.hx_lua_wrapper
+        :gsub("$<JS>", table.concat(hx_js_wrapper_content))
+        :gsub("$<HL>", table.concat(hx_hl_wrapper_content))
+    
     output_hx_wrapper_file:write(hx_wrapper_content)
     -- local stream = StringStream.new("LUA_API void	       *(lua_touserdata) (lua_State *L, int idx);")
 

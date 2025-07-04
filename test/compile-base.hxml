@@ -1,4 +1,3 @@
 -cp src
 -lib hllua54
--hl bin.hl
 --main Main

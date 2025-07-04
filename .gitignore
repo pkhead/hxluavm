@@ -1,6 +1,6 @@
 /lua-*
-/lib/lua54/Lua.hx
-/lib/lua54/LuaNative.hx
+/lib/luavm/Lua.hx
+/lib/luavm/LuaNative.hx
 
 export.c
 *.hdll
