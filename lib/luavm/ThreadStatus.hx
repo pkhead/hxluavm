@@ -1,4 +1,4 @@
-package lua54;
+package luavm;
 
 enum abstract ThreadStatus(Int) {
 	var Something = -1;

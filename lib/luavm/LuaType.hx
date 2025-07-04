@@ -1,4 +1,4 @@
-package lua54;
+package luavm;
 
 enum abstract LuaType(Int) {
 	var TNone = -1;

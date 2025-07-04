@@ -1,7 +1,7 @@
-import lua54.Lua;
-import lua54.LuaNative;
-import lua54.State;
-import lua54.ThreadStatus;
+import luavm.Lua;
+import luavm.LuaNative;
+import luavm.State;
+import luavm.ThreadStatus;
 
 class Main {
     static function addFunc(L:State) {

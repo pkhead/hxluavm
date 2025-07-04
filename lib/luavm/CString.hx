@@ -1,4 +1,4 @@
-package lua54;
+package luavm;
 
 abstract CString(hl.Bytes) from hl.Bytes to hl.Bytes {
     inline function new(ptr:hl.Bytes) {

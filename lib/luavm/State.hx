@@ -1,3 +1,3 @@
-package lua54;
+package luavm;
 
 abstract State(hl.Abstract<"lua_State">) {}

@@ -1,4 +1,4 @@
-package lua54;
+package luavm;
 
 enum abstract GcOptions(Int) {
 	var GcStop = 0;

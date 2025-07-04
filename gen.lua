@@ -344,7 +344,7 @@ do
     local funcs3 = parse_file(StringStream.new(read_header(lualibh_path)))
 
     local output_c_file <close> = assert(io.open("export.c", "w"), "could not open export.c")
-    local output_hx_bindings_file <close> = assert(io.open("lib/lua54/LuaNative.hx", "w"), "could not open lib/lua54/LuaNative.hx")
+    local output_hx_bindings_file <close> = assert(io.open("lib/luavm/LuaNative.hx", "w"), "could not open lib/luavm/LuaNative.hx")
 
     output_c_file:write([[#define HL_NAME(n) luahl_##n
 
@@ -357,13 +357,13 @@ do
 
 ]])
 
-    output_hx_bindings_file:write([[package lua54;
+    output_hx_bindings_file:write([[package luavm;
 import haxe.Constraints.Function;
-import lua54.GcOptions;
-import lua54.LuaType;
-import lua54.State;
-import lua54.ThreadStatus;
-import lua54.CString;
+import luavm.GcOptions;
+import luavm.LuaType;
+import luavm.State;
+import luavm.ThreadStatus;
+import luavm.CString;
 
 @:callable
 private abstract Callable<T:Function>(T) to T {
@@ -548,7 +548,7 @@ extern class LuaNative {
 
     output_hx_bindings_file:write("}")
 
-    local output_hx_wrapper_file <close> = assert(io.open("lib/lua54/Lua.hx", "w"), "could not open Lua.hx")
+    local output_hx_wrapper_file <close> = assert(io.open("lib/luavm/Lua.hx", "w"), "could not open Lua.hx")
     local hx_wrapper_content = conf.hx_lua_wrapper:gsub("$<AUTOGEN>", table.concat(haxe_wrapper_content))
     output_hx_wrapper_file:write(hx_wrapper_content)
     -- local stream = StringStream.new("LUA_API void	       *(lua_touserdata) (lua_State *L, int idx);")

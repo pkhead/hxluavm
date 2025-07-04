@@ -46,13 +46,13 @@ conf.overrides = {
     }
 }
 
-conf.hx_lua_wrapper = [[package lua54;
-import lua54.GcOptions;
-import lua54.LuaType;
-import lua54.State;
-import lua54.ThreadStatus;
-import lua54.LuaNative;
-import lua54.CString;
+conf.hx_lua_wrapper = [[package luavm;
+import luavm.GcOptions;
+import luavm.LuaType;
+import luavm.State;
+import luavm.ThreadStatus;
+import luavm.LuaNative;
+import luavm.CString;
 
 class Lua {
 $<AUTOGEN>
