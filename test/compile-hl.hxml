@@ -1,2 +1,2 @@
 compile-base.hxml
--hl bin.hl
+-hl out/main.hl

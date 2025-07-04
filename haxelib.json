@@ -1,5 +1,5 @@
 {
-    "name": "hllua54",
+    "name": "luavm",
     "license": "MIT",
     "version": "0.1.0",
     "classPath": "lib"

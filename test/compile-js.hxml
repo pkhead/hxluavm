@@ -1,2 +1,2 @@
 compile-base.hxml
--js ../luawasm/test/haxe.js
+-js out/js/main.js

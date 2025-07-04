@@ -17,7 +17,7 @@ conf.overrides = {
         args = {
             { "lua_State*", "L" },
             { "int", "idx" },
-            { "int*", "len" }
+            { "unsigned int*", "len" }
         },
         impl =
         [[
@@ -30,12 +30,79 @@ conf.overrides = {
 ]]
     },
 
+    luaL_checklstring = {
+        ret = "const char*",
+        args = {
+            { "lua_State*", "L" },
+            { "int", "idx" },
+            { "unsigned int*", "len" }
+        },
+        impl =
+        [[
+    if (len == NULL) return luaL_checklstring(L, idx, NULL);
+    
+    size_t tmp = (size_t)len;
+    const char *res = luaL_checklstring(L, idx, &tmp);
+    *len = (int)tmp;
+    return res;
+]]
+    },
+
+    luaL_tolstring = {
+        ret = "const char*",
+        args = {
+            { "lua_State*", "L" },
+            { "int", "idx" },
+            { "unsigned int*", "len" }
+        },
+        impl =
+        [[
+    if (len == NULL) return luaL_tolstring(L, idx, NULL);
+    
+    size_t tmp = (size_t)len;
+    const char *res = luaL_tolstring(L, idx, &tmp);
+    *len = (int)tmp;
+    return res;
+]]
+    },
+
+    luaL_optlstring = {
+        ret = "const char*",
+        args = {
+            { "lua_State*", "L" },
+            { "int", "arg" },
+            { "const char*", "def" },
+            { "unsigned int*", "l" }
+        },
+        impl =
+        [[
+    if (l == NULL) return luaL_optlstring(L, arg, def, NULL);
+    
+    size_t tmp = (size_t)l;
+    const char *res = luaL_optlstring(L, arg, def, &tmp);
+    *l = (int)tmp;
+    return res;
+]]
+    },
+
+    luaL_error = {
+        ret = "int",
+        args = {
+            { "lua_State*", "L" },
+            { "const char*", "msg" }
+        },
+        impl =
+        [[
+return luaL_error(L, msg);
+]]
+    },
+
     lua_pushlstring = {
         ret = "const char*",
         args = {
             { "lua_State*", "L" },
             { "const char*", "s" },
-            { "int", "len" }
+            { "unsigned int", "len" }
         },
         impl =
         [[

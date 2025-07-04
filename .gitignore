@@ -2,7 +2,8 @@
 /lib/luavm/Lua.hx
 /lib/luavm/LuaNative.hx
 
-export.c
+hlexport.c
+wasmexport.c
 *.hdll
 *.hl
 

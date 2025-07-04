@@ -1,7 +1,17 @@
-local luah_path = "lua-5.4.8/src/lua.h"
-local lualibh_path = "lua-5.4.8/src/lualib.h"
-local lauxlibh_path = "lua-5.4.8/src/lauxlib.h"
-local conf = require("conf")
+local native_lib_name, lua_src_path = ...
+
+if not native_lib_name then
+    error("native lib name (first argument) must be specified!")
+end
+
+if not lua_src_path then
+    error("lua include path (second argument) must be specified!")
+end
+
+local luah_path = lua_src_path .. "/lua.h"
+local lualibh_path = lua_src_path .. "/lualib.h"
+local lauxlibh_path = lua_src_path .. "/lauxlib.h"
+local conf = require("generator.conf")
 
 local function tfind(t, q)
     for i, v in pairs(t) do
@@ -345,10 +355,11 @@ do
     local funcs2 = parse_file(StringStream.new(read_header(lauxlibh_path) .. "\n" .. conf.extra_funcs.aux))
     local funcs3 = parse_file(StringStream.new(read_header(lualibh_path)))
 
-    local output_c_file <close> = assert(io.open("export.c", "w"), "could not open export.c")
+    local output_hlc_file <close> = assert(io.open("hlexport.c", "w"), "could not open hlexport.c")
+    local output_wasmc_file <close> = assert(io.open("wasmexport.c", "w"), "could not open wasmexport.c")
     local output_hx_bindings_file <close> = assert(io.open("lib/luavm/LuaNative.hx", "w"), "could not open lib/luavm/LuaNative.hx")
 
-    output_c_file:write([[#define HL_NAME(n) luahl_##n
+    output_hlc_file:write([[#define HL_NAME(n) luahl_##n
 
 #include <hl.h>
 #include <lua.h>
@@ -357,6 +368,13 @@ do
 
 #define _LSTATE _ABSTRACT(lua_State)
 #define _NUINT _ABSTRACT(_BYTES)
+
+]])
+
+    output_wasmc_file:write([[#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+#include <emscripten.h>
 
 ]])
 
@@ -411,6 +429,7 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
         ["lua_State*"] = {"_LSTATE", "State", "State"},
         ["const char*"] = {"_BYTES", "CString", "CString"},
         ["int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativeUInt"},
+        ["unsigned int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativeUInt"},
         ["size_t"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
 
         ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "CFunction", "FuncPtr<CFunction>"},
@@ -459,6 +478,21 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
     }
     local hx_hl_wrapper_content = {}
 
+    local function write_c_func_def(out, def, arg_names)
+        if def.impl then
+            out:write(def.impl)
+        else
+            out:write("    ")
+            if def.ret ~= "void" then
+                out:write("return ")
+            end
+            out:write(def.name)
+            out:write("(")
+            out:write(table.concat(arg_names, ", "))
+            out:write(");\n")
+        end
+    end
+
     local function proc_func_defs(funcdefs, target)
         local hx_bindings_source, hx_wrapper_content, target_index
 
@@ -488,7 +522,7 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
             local arg_names = {}
             local param_strs = {}
             local write_to_haxe_wrapper = tfind(haxe_trivial_types, haxe_ret[target_index]) ~= nil
-            local write_to_c_source = target == "hl"
+            local write_to_c_source = true
 
             for _, arg in ipairs(def.args) do
                 if arg.type == "..." then
@@ -537,38 +571,39 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
             local export_name = def.name
 
             if write_to_c_source then
-                output_c_file:write(("HL_PRIM %s HL_NAME(%s)(%s) {\n"):format(def.ret, export_name, table.concat(param_strs, ", ")))
+                -- writing to hl_export.c
+                if target == "hl" then
+                    output_hlc_file:write(("HL_PRIM %s HL_NAME(%s)(%s) {\n"):format(def.ret, export_name, table.concat(param_strs, ", ")))
+                    write_c_func_def(output_hlc_file, def, arg_names)
+                    output_hlc_file:write("}\n")
 
-                if def.impl then
-                    output_c_file:write(def.impl)
-                else
-                    output_c_file:write("    ")
-                    if def.ret ~= "void" then
-                        output_c_file:write("return ")
+                    output_hlc_file:write("DEFINE_PRIM(")
+                    output_hlc_file:write(haxe_ret[1])
+                    output_hlc_file:write(", ")
+                    output_hlc_file:write(export_name)
+                    output_hlc_file:write(", ")
+                    if param_strs[1] == "void" then
+                        output_hlc_file:write("_NO_ARG")
+                    else
+                        output_hlc_file:write(table.concat(hl_params, " "))
                     end
-                    output_c_file:write(def.name)
-                    output_c_file:write("(")
-                    output_c_file:write(table.concat(arg_names, ", "))
-                    output_c_file:write(");\n")
+                    output_hlc_file:write(")\n\n")
+
+                -- writing to wasmexport.c
+                elseif target == "js" then
+                    output_wasmc_file:write("EMSCRIPTEN_KEEPALIVE\n__attribute__((export_name(\"")
+                    output_wasmc_file:write(export_name)
+                    output_wasmc_file:write("\")))\n")
+                    output_wasmc_file:write(("%s export_%s(%s) {\n"):format(def.ret, export_name, table.concat(param_strs, ", ")))
+                    write_c_func_def(output_wasmc_file, def, arg_names)
+                    output_wasmc_file:write("}\n")
                 end
 
-                output_c_file:write("}\n")
-
-                output_c_file:write("DEFINE_PRIM(")
-                output_c_file:write(haxe_ret[1])
-                output_c_file:write(", ")
-                output_c_file:write(export_name)
-                output_c_file:write(", ")
-                if param_strs[1] == "void" then
-                    output_c_file:write("_NO_ARG")
-                else
-                    output_c_file:write(table.concat(hl_params, " "))
-                end
-                output_c_file:write(")\n\n")
+                -- %s export_"))
             end
 
             if target == "hl" then
-                tinsert(hx_bindings_source, "    @:hlNative(\"lua54\", \"")
+                tinsert(hx_bindings_source, ("    @:hlNative(\"%s\", \""):format(native_lib_name))
                 tinsert(hx_bindings_source, export_name)
                 tinsert(hx_bindings_source, "\")\n")
             end
