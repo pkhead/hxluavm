@@ -417,54 +417,35 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
     -- 1: hl.h type
     -- 2: haxe hl type
     -- 3: haxe js/wasm type
-    local haxe_type_mappings = {
-        ["void"] = {"_VOID", "Void", "Void"},
-        ["void*"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
-        ["int"] = {"_I32", "Int", "Int"},
-        ["unsigned int"] = {"_I32", "Int", "Int"},
-        ["float"] = {"_F32", "Single", "Single"},
-        ["double"] = {"_F64", "Float", "Float"},
-        ["lua_Number"] = {"_F64", "Float", "Float"},
-        ["lua_Integer"] = {"_I64", "haxe.Int64", "haxe.Int64"},
-        ["lua_State*"] = {"_LSTATE", "State", "State"},
-        ["const char*"] = {"_BYTES", "CString", "CString"},
-        ["int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativeUInt"},
-        ["unsigned int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativeUInt"},
-        ["size_t"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
-
-        ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "CFunction", "FuncPtr<CFunction>"},
-        ["lua_KFunction"] = {"_FUN(_I32,_LSTATE _I32 _BYTES)", "KFunction", "FuncPtr<KFunction>"},
-        ["lua_KContext"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
-        -- ["lua_Reader"] = {"_FUN(_BYTES,_LSTATE _BYTES _REF(_I64))", "Reader"}
-    }
+    local haxe_type_mappings = conf.haxe_type_mappings
 
     local haxe_trivial_types = {
         "Void", "Int", "Single", "Float", "State", "CString", "CFunction", "KFunction"
     }
 
     local hx_js_bindings_source = {[[class LuaNative {
-    public static var vm:Dynamic;
+    public static var wasm:Dynamic;
 
     public static function init(cb:()->Void) {
-        js.Syntax.code("LuaVM({}).then((vm) => { {0} = vm; cb(); })", vm);
+        js.Syntax.code("LuaVM({}).then((wasm) => { {0} = wasm; cb(); })", wasm);
     }
 
     public static function vmAllocString(str:CString):NativeUInt {
         var bytes = str.toBytes();
-        var ptr = vm._malloc(bytes.length + 1);
+        var ptr = wasm._malloc(bytes.length + 1);
         for (i in 0...bytes.length) {
-            vm.HEAPU8[ptr+i] = bytes.get(i);
+            wasm.HEAPU8[ptr+i] = bytes.get(i);
         }
-        vm.HEAPU8[ptr + bytes.length] = 0;
+        wasm.HEAPU8[ptr + bytes.length] = 0;
         return ptr;
     }
     
     static inline function _freeString(ptr:NativeUInt) {
-        vm._free(ptr);
+        wasm._free(ptr);
     }
 
     public static function vmAllocFuncPtr<T:Function>(func:T, funcType:FunctionType):FuncPtr<T> {
-        return cast vm.addFunction(func, switch (funcType) {
+        return cast wasm.addFunction(func, switch (funcType) {
             case CFunction: "ip";
             case KFunction: "ipip";
         });
@@ -667,7 +648,7 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
                 if def.ret ~= "void" then
                     tinsert(hx_bindings_source, "var _res_ = ")
                 end
-                tinsert(hx_bindings_source, "vm._")
+                tinsert(hx_bindings_source, "wasm._")
                 tinsert(hx_bindings_source, def.name)
                 tinsert(hx_bindings_source, "(")
                 tinsert(hx_bindings_source, table.concat(param_names, ", "))

@@ -1,15 +1,33 @@
 local conf = {}
 
+-- 1: hl.h type
+-- 2: haxe hl type
+-- 3: haxe js/wasm type
+conf.haxe_type_mappings = {
+    ["void"] = {"_VOID", "Void", "Void"},
+    ["void*"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
+    ["int"] = {"_I32", "Int", "Int"},
+    ["unsigned int"] = {"_I32", "Int", "Int"},
+    ["float"] = {"_F32", "Single", "Single"},
+    ["double"] = {"_F64", "Float", "Float"},
+    ["lua_Number"] = {"_F64", "Float", "Float"},
+    ["lua_Integer"] = {"_I64", "haxe.Int64", "haxe.Int64"},
+    ["lua_State*"] = {"_LSTATE", "State", "State"},
+    ["const char*"] = {"_BYTES", "CString", "CString"},
+    ["int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativeUInt"},
+    ["unsigned int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativeUInt"},
+    ["size_t"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
+
+    ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "CFunction", "FuncPtr<CFunction>"},
+    ["lua_KFunction"] = {"_FUN(_I32,_LSTATE _I32 _BYTES)", "KFunction", "FuncPtr<KFunction>"},
+    ["lua_KContext"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
+    -- ["lua_Reader"] = {"_FUN(_BYTES,_LSTATE _BYTES _REF(_I64))", "Reader"}
+}
+
 conf.extra_funcs = {
     main = "",
     aux = ""
 }
-
--- conf.raw_haxe = [[    public static inline function tostring(L:State, i:Int):CString { return tolstring(L, i, null); }
---     public static inline function tonumber(L:State, idx:Int):Float { return tonumberx(L, idx, null); }
-
---     public static inline function hxToBytes(L:State, i:Int):CString { return tolstring(L, i, null); }
--- ]]
 
 conf.overrides = {
     lua_tolstring = {
@@ -108,6 +126,24 @@ return luaL_error(L, msg);
         [[
     return lua_pushlstring(L, s, (size_t)len);
 ]]
+    },
+
+    lua_gc = {
+        ret = "int",
+        args = {
+            { "lua_State*", "L" },
+            { "int", "what" },
+            { "int", "a" },
+            { "int", "b" },
+            { "int", "c" },
+        },
+        impl =
+        [[
+    if (what == LUA_GCINC) return lua_gc(L, what, a, b, c);
+    if (what == LUA_GCGEN) return lua_gc(L, what, a, b);
+    if (what == LUA_GCSTEP) return lua_gc(L, what, a);
+    return lua_gc(L, what);
+]]
     }
 }
 
@@ -125,14 +161,14 @@ $<JS>
     public static inline function init(cb:()->Void) LuaNative.init(cb);
     
     public static function toBytes(L:State, idx:Int):haxe.io.Bytes {
-        var tmpAlloc:Int = LuaNative.vm._malloc(4);
+        var tmpAlloc:Int = LuaNative.wasm._malloc(4);
         var ptr = LuaNative.lua_tolstring(L, idx, tmpAlloc);
-        var len:Int = LuaNative.vm.HEAPU32[tmpAlloc>>2]; // assumes alignment
-        LuaNative.vm._free(tmpAlloc);
+        var len:Int = LuaNative.wasm.HEAPU32[tmpAlloc>>2]; // assumes alignment
+        LuaNative.wasm._free(tmpAlloc);
 
         var bytes = haxe.io.Bytes.alloc(len);
         for (i in 0...len) {
-            bytes.set(i, LuaNative.vm.HEAPU8[ptr.toInt32()+i]);
+            bytes.set(i, LuaNative.wasm.HEAPU8[ptr.toInt32()+i]);
         }
         
         return bytes;
