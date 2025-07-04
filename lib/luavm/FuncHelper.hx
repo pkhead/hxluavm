@@ -1,0 +1,87 @@
+package luavm;
+
+import luavm.LuaNative;
+import luavm.Lua;
+
+/**
+ * Utility class for pushing Haxe functions.
+ * 
+ * There are limitations/qualms with regards to pushing Haxe functions onto the Lua stack.
+ * - hl: Functions cannot reference a closure.
+ * - js: You must manually allocate a function pointer for every function you want to push.
+ * 
+ * This class provides a good workaround for this issue.
+ */
+class FuncHelper {
+    private static var funcMap:Map<Int, luavm.State->Int> = [];
+    private static var nextId = 1;
+    private static var HX_CLOSURE_MT = "HaxeFunction";
+
+    #if js
+    static var callCallbackHandle:FuncPtr<CFunction>;
+    #else
+    static var callCallbackHandle:CFunction;
+    #end
+
+    static function gcCallback(L:luavm.State) {
+        var ptr = Lua.l_checkudata(L, 1, HX_CLOSURE_MT);
+        if (!ptr.isNull) {
+            var id = ptr.getI32(0);
+            funcMap.remove(id);
+        }
+
+        return 0;
+    }
+
+    static function callCallback(L:luavm.State) {
+        var ptr = Lua.l_checkudata(L, Lua.upvalueindex(1), HX_CLOSURE_MT);
+        if (!ptr.isNull) {
+            var id = ptr.getI32(0);
+            var f = funcMap[id];
+            if (f != null) {
+                return f(L);
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * Initialize the uility.
+     * @param L The main Lua state.
+     */
+    public static function init(L:luavm.State) {
+        #if js
+        var gcFuncHandle = LuaNative.vmAllocFuncPtr(gcCallback, CFunction);
+        callCallbackHandle = LuaNative.vmAllocFuncPtr(callCallback, CFunction);
+        #else
+        var gcFuncHandle = gcCallback;
+        callCallbackHandle = callCallback;
+        #end
+
+        Lua.l_newmetatable(L, HX_CLOSURE_MT);
+        LuaNative.lua_pushcclosure(L, gcFuncHandle, 0);
+        Lua.setfield(L, -2, "__gc");
+        Lua.pop(L, 1);
+    }
+
+    /**
+     * Push a Haxe function onto the Lua stack.
+     * 
+     * Note: when the given function is being called, the first upvalue will exist
+     * and will refer to internal data.
+     * @param L The Lua state.
+     * @param func The CFunction to push.
+     */
+    public static function push(L:luavm.State, func:luavm.State->Int) {
+        var ptr = LuaNative.lua_newuserdatauv(L, 4, 1);
+        ptr.setI32(0, nextId);
+        funcMap[nextId] = func;
+        nextId++;
+
+        Lua.l_getmetatable(L, HX_CLOSURE_MT);
+        Lua.setmetatable(L, -2);
+
+        LuaNative.lua_pushcclosure(L, callCallbackHandle, 1);
+    }
+}

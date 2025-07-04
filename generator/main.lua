@@ -351,9 +351,9 @@ do
         return table.concat(line_list, "\n")
     end
     
-    local funcs1 = parse_file(StringStream.new(read_header(luah_path) .. "\n" .. conf.extra_funcs.main))
-    local funcs2 = parse_file(StringStream.new(read_header(lauxlibh_path) .. "\n" .. conf.extra_funcs.aux))
-    local funcs3 = parse_file(StringStream.new(read_header(lualibh_path)))
+    local funcs1 = parse_file(StringStream.new(read_header(luah_path)))
+    local funcs2 = parse_file(StringStream.new(read_header(lauxlibh_path)))
+    local funcs3 = parse_file(StringStream.new(read_header(lualibh_path) .. "\n" .. (conf.c_header_extra or "")))
 
     local output_hlc_file <close> = assert(io.open("hlexport.c", "w"), "could not open hlexport.c")
     local output_wasmc_file <close> = assert(io.open("wasmexport.c", "w"), "could not open wasmexport.c")
@@ -504,6 +504,10 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
             local param_strs = {}
             local write_to_haxe_wrapper = tfind(haxe_trivial_types, haxe_ret[target_index]) ~= nil
             local write_to_c_source = true
+
+            if def.name:sub(1, 5) == "luaX_" then
+                write_to_haxe_wrapper = false
+            end
 
             for _, arg in ipairs(def.args) do
                 if arg.type == "..." then
@@ -675,6 +679,8 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
                     name_prefix = "l_"
                 elseif string.find(def.name, "luaopen_", 1, true) == 1 then
                     name_prefix = "open_"
+                elseif string.find(def.name, "luaX_", 1, true) == 1 then
+                    name_prefix = "x_"
                 end
                 local wrapper_name = name_prefix .. string.sub(def.name, string.find(def.name, "_", 1, true)+1, -1)
 

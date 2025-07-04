@@ -11,14 +11,14 @@ WASM_OUTPUT_DIR?=test/out/js
 
 all: hl wasm
 
-hlexport.c wasmexport.c: generator/main.lua
+hlexport.c wasmexport.c: generator/main.lua generator/conf.lua
 	$(LUA) generator/main.lua $(LIB_NAME) $(LUA_INCLUDE)
 
 $(LIB_NAME).hdll: hlexport.c $(LUA_SOURCES)
 	$(CC) -shared -o $@ -I$(LUA_INCLUDE) $< $(LUA_SOURCES) -lhl $(CFLAGS)
 
 $(WASM_OUTPUT_DIR)/$(LIB_NAME).js: wasmexport.c $(LUA_SOURCES)
-	$(EMCC) -o $@ $(EMCCFLAGS) -I$(LUA_INCLUDE) wasmexport.c $(LUA_SOURCES) -sMODULARIZE -sEXPORT_NAME=LuaVM -sALLOW_TABLE_GROWTH=1 -sEXPORTED_FUNCTIONS=_malloc,_free -sEXPORTED_RUNTIME_METHODS=addFunction,HEAPU8,HEAP32,HEAPU32
+	$(EMCC) -o $@ $(EMCCFLAGS) -I$(LUA_INCLUDE) wasmexport.c $(LUA_SOURCES) -sMODULARIZE -sEXPORT_NAME=LuaVM -sALLOW_TABLE_GROWTH=1 -sEXPORTED_FUNCTIONS=_malloc,_free -sEXPORTED_RUNTIME_METHODS=addFunction,HEAPU8,HEAPU32,wasmMemory
 
 install: $(LIB_NAME).hdll
 	sudo cp $< /usr/local/lib

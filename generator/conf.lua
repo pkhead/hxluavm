@@ -24,12 +24,17 @@ conf.haxe_type_mappings = {
     -- ["lua_Reader"] = {"_FUN(_BYTES,_LSTATE _BYTES _REF(_I64))", "Reader"}
 }
 
-conf.extra_funcs = {
-    main = "",
-    aux = ""
-}
+conf.c_header_extra = [[
+LUA_API int luaX_getregistryindex(void);
+]]
 
 conf.overrides = {
+    luaX_getregistryindex = {
+        ret = "int",
+        args = {},
+        impl = "return LUA_REGISTRYINDEX;\n"
+    },
+
     lua_tolstring = {
         ret = "const char*",
         args = {
@@ -144,6 +149,19 @@ return luaL_error(L, msg);
     if (what == LUA_GCSTEP) return lua_gc(L, what, a);
     return lua_gc(L, what);
 ]]
+    },
+
+    lua_newuserdatauv = {
+        ret = "void*",
+        args = {
+            { "lua_State*", "L" },
+            { "unsigned int", "sz" },
+            { "int", "nuvalue" }
+        },
+        impl =
+        [[
+    return lua_newuserdatauv(L, (size_t)sz, nuvalue);
+]]
     }
 }
 
@@ -156,9 +174,18 @@ import luavm.LuaNative;
 import luavm.CString;
 
 class Lua {
+    private static var _registryIndex:Int;
+    public static var REGISTRYINDEX(get, never):Int;
+    inline static function get_REGISTRYINDEX() return _registryIndex;
+    
 #if js
 $<JS>
-    public static inline function init(cb:()->Void) LuaNative.init(cb);
+    public static function init(cb:()->Void) {
+        LuaNative.init(() -> {
+            _registryIndex = LuaNative.luaX_getregistryindex();
+            cb();
+        });
+    }
     
     public static function toBytes(L:State, idx:Int):haxe.io.Bytes {
         var tmpAlloc:Int = LuaNative.wasm._malloc(4);
@@ -192,7 +219,10 @@ $<JS>
 #else
 $<HL>
 
-    public static inline function init(cb:()->Void) cb();
+    public static function init(cb:()->Void) {
+        _registryIndex = LuaNative.luaX_getregistryindex();
+        cb();
+    }
     
     public static function toBytes(L:State, idx:Int):haxe.io.Bytes {
         var len = 0;
@@ -255,6 +285,22 @@ $<HL>
 
     public static inline function rawseti(L:State, idx:Int, n:Int):Void {
         return LuaNative.lua_rawseti(L, idx, haxe.Int64.ofInt(n));
+    }
+
+    public static function pop(L:State, n:Int):Void {
+        LuaNative.lua_settop(L, -(n)-1);
+    }
+
+    public static inline function l_getmetatable(L:State, tname:String) {
+        LuaNative.lua_getfield(L, REGISTRYINDEX, tname);
+    }
+
+    public static inline function l_checkudata(L:State, ud:Int, tname:String):NativeUInt {
+        return LuaNative.luaL_checkudata(L, ud, tname);
+    }
+
+    public static inline function upvalueindex(i:Int) {
+        return REGISTRYINDEX - i;
     }
 }
 ]]

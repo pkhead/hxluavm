@@ -9,3 +9,4 @@ wasmexport.c
 
 .clangd
 .DS_Store
+.vscode

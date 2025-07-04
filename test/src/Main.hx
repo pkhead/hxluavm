@@ -3,6 +3,7 @@ import luavm.LuaNative;
 import luavm.Lua;
 import luavm.State;
 import luavm.ThreadStatus;
+import luavm.FuncHelper;
 
 class Main {
     // static function addFunc(L:State) {
@@ -52,10 +53,53 @@ class Main {
     public static function main() {
         Lua.init(() -> {
             trace("initialization done");
-
+            
             var L = Lua.l_newstate();
             Lua.l_openlibs(L);
-            var str = "print(\"Hello, world!\")";
+            FuncHelper.init(L);
+
+            FuncHelper.push(L, (L) -> {
+                var a = Lua.l_checknumber(L, 1);
+                var b = Lua.l_checknumber(L, 2);
+
+                Lua.pushnumber(L, a + b);
+                return 1;
+            });
+            Lua.setglobal(L, "add");
+
+            #if js
+            FuncHelper.push(L, (L) -> {
+                var count = Lua.gettop(L);
+                var strs = [];
+                for (i in 0...count) {
+                    strs.push(Lua.tostring(L, 1 + i));
+                }
+
+                js.html.Console.log(strs.join("  "));
+
+                return 0;
+            });
+            Lua.setglobal(L, "print");
+
+            FuncHelper.push(L, (L) -> {
+                var count = Lua.gettop(L);
+                var strs = [];
+                for (i in 0...count) {
+                    strs.push(Lua.tostring(L, 1 + i));
+                }
+
+                js.html.Console.warn(strs.join("  "));
+
+                return 0;
+            });
+            Lua.setglobal(L, "warn");
+            #end
+
+            #if sys
+            var str = sys.io.File.getContent("code.lua");
+            #else
+            var str = Macros.getLuaSource();
+            #end
             if (Lua.l_loadstring(L, str) != cast ThreadStatus.Ok) {
                 trace("parse error!");
                 trace(Lua.tostring(L, -1));
