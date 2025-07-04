@@ -1,5 +1,7 @@
 local luah_path = "lua-5.4.8/src/lua.h"
+local lualibh_path = "lua-5.4.8/src/lualib.h"
 local lauxlibh_path = "lua-5.4.8/src/lauxlib.h"
+local conf = require("conf")
 
 local function tfind(t, q)
     for i, v in pairs(t) do
@@ -9,6 +11,19 @@ local function tfind(t, q)
     end
     return nil
 end
+
+-- local function the_haxe_casing_thing(orig)
+--     local upper = string.upper(orig)
+--     local out = {string.lower(string.sub(orig, 1, 1))}
+--     for i=2, string.len(orig) do
+--         local ch = string.sub(orig, i, i)
+--         if ch == string.sub(upper, i, i) then
+--             table.insert(out, "_")
+--         end
+--         table.insert(out, string.lower(ch))
+--     end
+--     return table.concat(out)
+-- end
 
 ---@class Stream
 ---@field popchar fun(self:Stream):integer Pops one character, returning its code.
@@ -119,6 +134,8 @@ do
         return tok.type == type and tok.str == v
     end
 
+    local export_defines = {"LUA_API", "LUALIB_API", "LUAMOD_API"}
+
     ---@param stream Stream
     local function parse_c_funcdef(stream)
         local tokens = tokenize_c_line(stream)
@@ -128,7 +145,7 @@ do
         -- end
         -- print("==END TOKENS==")
 
-        if tokens[1] == nil or not (token_check(tokens[1], "word", "LUA_API") or token_check(tokens[1], "word", "LUALIB_API")) then
+        if tokens[1] == nil or not (tokens[1].type == "word" and tfind(export_defines, tokens[1].str)) then
             return nil
         end
 
@@ -146,7 +163,7 @@ do
                 if possible_modifer == "const" or possible_modifer == "unsigned" then
                     table.insert(tmp, " ")
                     table.insert(tmp, tokens[index].str)
-                elseif token_check(tokens[index], "symbol", "*") then
+                elseif token_check(tokens[index], "symbol", "*") or token_check(tokens[index], "symbol", "[") or token_check(tokens[index], "symbol", "]") then
                     table.insert(tmp, "*")
                 else
                     -- index=index+1
@@ -169,6 +186,7 @@ do
 
         assert(tokens[index].type == "word")
         output.name = tokens[index].str
+        print("processing " .. output.name)
         index=index+1
 
         if func_name_in_paren then
@@ -207,6 +225,20 @@ do
         end
 
         assert(token_check(tokens[index], "symbol", ";"))
+
+        local override = conf.overrides[output.name]
+        if override then
+            output.ret = override.ret
+            output.args = {}
+
+            for i, arg_override in ipairs(override.args) do
+                output.args[i] = { type = arg_override[1], name = arg_override[2] }
+            end
+
+            output.impl = override.impl
+        end
+        
+        print("DONE!")
 
         return output
 
@@ -304,54 +336,75 @@ do
             end
         end
 
-        print(table.concat(line_list, "\n"))
-
         return table.concat(line_list, "\n")
     end
     
-    local funcs1 = parse_file(StringStream.new(read_header(luah_path)))
-    -- local funcs2 = parse_file(StringStream.new(read_header(lauxlibh_path)))
+    local funcs1 = parse_file(StringStream.new(read_header(luah_path) .. "\n" .. conf.extra_funcs.main))
+    local funcs2 = parse_file(StringStream.new(read_header(lauxlibh_path) .. "\n" .. conf.extra_funcs.aux))
+    local funcs3 = parse_file(StringStream.new(read_header(lualibh_path)))
 
     local output_c_file <close> = assert(io.open("export.c", "w"), "could not open export.c")
-    local output_hx_file <close> = assert(io.open("lib/Lua.hx", "w"), "could not open lib/Lua.hx")
+    local output_hx_bindings_file <close> = assert(io.open("lib/lua54/LuaNative.hx", "w"), "could not open lib/lua54/LuaNative.hx")
 
     output_c_file:write([[#define HL_NAME(n) luahl_##n
 
 #include <hl.h>
 #include <lua.h>
 #include <lauxlib.h>
+#include <lualib.h>
 
 #define _LSTATE _ABSTRACT(lua_State)
 
 ]])
 
-    output_hx_file:write([[package;
+    output_hx_bindings_file:write([[package lua54;
+import haxe.Constraints.Function;
+import lua54.GcOptions;
+import lua54.LuaType;
+import lua54.State;
+import lua54.ThreadStatus;
+import lua54.CString;
 
-abstract State(hl.Abstract<"lua_State">) {}
+@:callable
+private abstract Callable<T:Function>(T) to T {
+	@:from static function fromT<T:Function>(f:T) {
+		return cast hl.Api.noClosure(f);
+	}
+}
+
 typedef CFunction = Callable<State->Int>;
+typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
 
-@:hlNative("lua54")
-extern class Lua {
+extern class LuaNative {
 ]])
 
     local func_types = {"lua_CFunction"}
 
     local haxe_type_mappings = {
         ["void"] = {"_VOID", "Void"},
+        ["void*"] = {"_BYTES", "hl.Bytes"},
         ["int"] = {"_I32", "Int"},
         ["unsigned int"] = {"_I32", "Int"},
         ["float"] = {"_F32", "Single"},
         ["double"] = {"_F64", "Float"},
         ["lua_Number"] = {"_F64", "Float"},
-        ["lua_Integer"] = {"_I64", "Int64"},
+        ["lua_Integer"] = {"_I64", "haxe.Int64"},
         ["lua_State*"] = {"_LSTATE", "State"},
-        ["const char*"] = {"_BYTES", "hl.Bytes"},
+        ["const char*"] = {"_BYTES", "CString"},
+        ["int*"] = {"_REF(_I32)", "hl.Ref<Int>"},
+        ["size_t"] = {"_I64", "haxe.Int64"},
 
-        ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "CFunction"}
+        ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "CFunction"},
+        ["lua_Reader"] = {"_FUN(_BYTES,_LSTATE _BYTES _REF(_I64))", "Reader"}
     }
-    local function proc_func_defs(funcdefs, haxe_func_prefix)
-        haxe_func_prefix = haxe_func_prefix or ""
 
+    local haxe_trivial_types = {
+        "Void", "Int", "Single", "Float", "State", "CString", "CFunction", "Reader"
+    }
+
+    local haxe_wrapper_content = {}
+
+    local function proc_func_defs(funcdefs, haxe_func_prefix)
         -- assert(stream:eof())
         for _, def in ipairs(funcdefs) do
             local haxe_ret = haxe_type_mappings[def.ret]
@@ -363,6 +416,7 @@ extern class Lua {
             local haxe_params = {}
             local arg_names = {}
             local param_strs = {}
+            local write_to_haxe_wrapper = tfind(haxe_trivial_types, haxe_ret[2]) ~= nil
 
             for _, arg in ipairs(def.args) do
                 if arg.type == "..." then
@@ -389,8 +443,17 @@ extern class Lua {
                     table.insert(param_strs, ("%s %s"):format(arg.type, arg.name))
                 end
 
+                local haxe_type = map[2]
+                -- if haxe_type == "hl.Bytes" then
+                --     haxe_type = "LuaString"
+                -- end
+
                 table.insert(hl_params, map[1])
-                table.insert(haxe_params, arg.name .. ": " .. map[2])
+                table.insert(haxe_params, arg.name .. ":" .. haxe_type)
+
+                if not tfind(haxe_trivial_types, haxe_type) then
+                    write_to_haxe_wrapper = false
+                end
             end
 
             if param_strs[1] == nil then
@@ -398,17 +461,28 @@ extern class Lua {
             end
             -- test_file:write(("%s %s(%s);\n"):format(def.ret, def.name, table.concat(arg_names, ", ")))
 
-            local export_name = haxe_func_prefix .. string.sub(def.name, string.find(def.name, "_", 1, true)+1, -1)
+            -- local export_name = string.sub(def.name, string.find(def.name, "_", 1, true)+1, -1)
+            local export_name = def.name
+            if haxe_func_prefix then
+                export_name = haxe_func_prefix .. export_name
+            end
 
             output_c_file:write(("HL_PRIM %s HL_NAME(%s)(%s) {\n"):format(def.ret, export_name, table.concat(param_strs, ", ")))
-            output_c_file:write("\t")
-            if def.ret ~= "void" then
-                output_c_file:write("return ")
+
+            if def.impl then
+                output_c_file:write(def.impl)
+            else
+                output_c_file:write("    ")
+                if def.ret ~= "void" then
+                    output_c_file:write("return ")
+                end
+                output_c_file:write(def.name)
+                output_c_file:write("(")
+                output_c_file:write(table.concat(arg_names, ", "))
+                output_c_file:write(");\n")
             end
-            output_c_file:write(def.name)
-            output_c_file:write("(")
-            output_c_file:write(table.concat(arg_names, ", "))
-            output_c_file:write(");\n}\n")
+
+            output_c_file:write("}\n")
 
             output_c_file:write("DEFINE_PRIM(")
             output_c_file:write(haxe_ret[1])
@@ -422,19 +496,61 @@ extern class Lua {
             end
             output_c_file:write(")\n\n")
 
-            output_hx_file:write("\tpublic static function ")
-            output_hx_file:write(export_name)
-            output_hx_file:write("(")
-            output_hx_file:write(table.concat(haxe_params, ", "))
-            output_hx_file:write(");\n")
+            output_hx_bindings_file:write("    @:hlNative(\"lua54\", \"")
+            output_hx_bindings_file:write(export_name)
+            output_hx_bindings_file:write("\")\n")
+            output_hx_bindings_file:write("    public static function ")
+            output_hx_bindings_file:write(def.name)
+            output_hx_bindings_file:write("(")
+            output_hx_bindings_file:write(table.concat(haxe_params, ", "))
+            output_hx_bindings_file:write("):")
+            output_hx_bindings_file:write(haxe_ret[2])
+            output_hx_bindings_file:write(";\n")
+
+            if write_to_haxe_wrapper then
+                local jfeowj = {}
+                for _, arg in ipairs(def.args) do
+                    table.insert(jfeowj, arg.name)
+                end
+
+                local name_prefix
+                if string.find(def.name, "lua_", 1, true) == 1 then
+                    name_prefix = ""
+                elseif string.find(def.name, "luaL_", 1, true) == 1 then
+                    name_prefix = "l_"
+                elseif string.find(def.name, "luaopen_", 1, true) == 1 then
+                    name_prefix = "open_"
+                end
+                local wrapper_name = name_prefix .. string.sub(def.name, string.find(def.name, "_", 1, true)+1, -1)
+
+                table.insert(haxe_wrapper_content, "    public static inline function ")
+                table.insert(haxe_wrapper_content, wrapper_name)
+                table.insert(haxe_wrapper_content, "(")
+                table.insert(haxe_wrapper_content, table.concat(haxe_params, ", "))
+                table.insert(haxe_wrapper_content, ") return LuaNative.")
+                table.insert(haxe_wrapper_content, def.name)
+                table.insert(haxe_wrapper_content, "(")
+                table.insert(haxe_wrapper_content, table.concat(jfeowj, ", "))
+                table.insert(haxe_wrapper_content, ");\n")
+            end
 
             ::skip_this_def::
         end
     end
 
     proc_func_defs(funcs1)
+    proc_func_defs(funcs2)
+    proc_func_defs(funcs3)
 
-    output_hx_file:write("}")
+    if conf.raw_haxe then
+        output_hx_bindings_file:write(conf.raw_haxe)
+    end
+
+    output_hx_bindings_file:write("}")
+
+    local output_hx_wrapper_file <close> = assert(io.open("lib/lua54/Lua.hx", "w"), "could not open Lua.hx")
+    local hx_wrapper_content = conf.hx_lua_wrapper:gsub("$<AUTOGEN>", table.concat(haxe_wrapper_content))
+    output_hx_wrapper_file:write(hx_wrapper_content)
     -- local stream = StringStream.new("LUA_API void	       *(lua_touserdata) (lua_State *L, int idx);")
 
     
