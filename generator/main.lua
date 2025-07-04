@@ -198,7 +198,7 @@ do
 
         assert(tokens[index].type == "word")
         output.name = tokens[index].str
-        print("processing " .. output.name)
+        --print("processing " .. output.name)
         index=index+1
 
         if func_name_in_paren then
@@ -250,7 +250,7 @@ do
             output.impl = override.impl
         end
         
-        print("DONE!")
+        --print("DONE!")
 
         return output
 
