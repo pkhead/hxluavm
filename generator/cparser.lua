@@ -1,5 +1,6 @@
 local cparser = {}
 local conf = require("generator.conf")
+local inspect = require("generator.inspect")
 
 local tinsert = table.insert
 
@@ -339,12 +340,6 @@ local function parse_c_structdef(tokens)
             tok_idx=tok_idx+1
         end
 
-        local mem_name_display = mem_name
-        if arr_size > 1 then
-            mem_name_display = ("%s[%i]"):format(mem_name_display, arr_size)
-        end
-        print("FOUND", mem_type, mem_name_display)
-
         assert_token_check(tokens[tok_idx], "symbol", ";", "expected semicolon")
         tok_idx=tok_idx+1
 
@@ -360,7 +355,74 @@ local function parse_c_structdef(tokens)
     return struct_data
 end
 
-function parse_file(funcs, structs, stream)
+function cparser.parse_struct(structdef, native_size)
+    local struct = {
+        name = structdef.name,
+        members = {},
+        size = 0
+    }
+
+    local cur_offset = 0
+    for _, v in pairs(structdef.members) do
+        local type_info = stringx.split_space(v.type)
+
+        -- remove "unsigned" and "const", as they do not affect member size
+        for i=#type_info, 1, -1 do
+            local v = type_info[i]
+            if v == "unsigned" or v == "const" then
+                table.remove(type_info, i)
+            end
+        end
+
+        local prim = table.concat(type_info, " ")
+
+        local member_size
+        local member_align
+        if string.sub(prim, -1) == "*" then
+            member_size = native_size
+            member_align = native_size
+        elseif prim == "int" then
+            member_size = 4
+            member_align = 4
+        elseif prim == "char" then
+            member_size = 1
+            member_align = 1
+        elseif prim == "short" then
+            member_size = 2
+            member_align = 2
+        elseif prim == "size_t" then
+            member_size = native_size
+            member_align = native_size
+        elseif prim == "long" then
+            member_size = 8
+            member_align = 8
+        else
+            error("unsupported member type " .. prim)
+        end
+
+        cur_offset = math.ceil(cur_offset / member_align) * member_align
+        member_size = member_size * v.count
+
+        tinsert(struct.members, {
+            type = v.type,
+            base_type = prim,
+            name = v.name,
+            count = v.count,
+            size = member_size,
+            alignment = member_align,
+            offset = cur_offset
+        })
+
+        -- print(type_info[#type_info], v.name)
+        cur_offset = cur_offset + member_size
+    end
+
+    struct.size = cur_offset
+
+    return struct
+end
+
+local function parse_file(funcs, structs, stream)
     -- local test_file <close> = assert(io.open("test.c", "w"))
     local pos = {
         line = -1,
@@ -375,7 +437,7 @@ function parse_file(funcs, structs, stream)
             table.insert(funcs, func)
         else
             local struct = parse_c_structdef(tokens)
-            if struct and structs[struct.name] == nil then
+            if struct then
                 table.insert(structs, struct)
             end
         end

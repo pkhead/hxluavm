@@ -6,6 +6,12 @@ abstract CString(haxe.io.Bytes) {
         this = bytes;
     }
 
+    public static function strLen(bytes:NativePtr, pos:Int):Int {
+        var len = 0;
+        while (bytes[len+pos] != 0) len++;
+        return len;
+    }
+
     @:from static inline function fromString(s:String) {
         return new CString(haxe.io.Bytes.ofString(s));
     }
@@ -24,10 +30,14 @@ abstract CString(hl.Bytes) from hl.Bytes to hl.Bytes {
         this = ptr;
     }
 
-    private static function readCStr(bytes:hl.Bytes):haxe.io.Bytes {
+    public static function strLen(bytes:hl.Bytes, pos:Int):Int {
         var len = 0;
-        while (bytes[len] != 0) len++;
-        return bytes.toBytes(len);
+        while (bytes[len+pos] != 0) len++;
+        return len;
+    }
+
+    private static inline function readCStr(bytes:hl.Bytes):haxe.io.Bytes {
+        return bytes.toBytes(strLen(bytes, 0));
     }
 
     @:from static inline function fromString(s:String) {

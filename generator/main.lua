@@ -20,6 +20,7 @@ require("generator.util")
 local conf = require("generator.conf")
 local StringStream = require("generator.sstream")
 local cparser = require("generator.cparser")
+local inspect = require("generator.inspect")
 
 local tinsert = table.insert
 
@@ -40,11 +41,11 @@ do
     local structs = {}
     
     -- print("processing " .. luah_path)
-    parse_file(funcs, structs, StringStream.new(cparser.read_headers(CC, luah_path, lauxlibh_path, lualibh_path)))
+    cparser.parse_file(funcs, structs, StringStream.new(cparser.read_headers(CC, luah_path, lauxlibh_path, lualibh_path)))
 
     if conf.c_header_extra then
         print("processing c_header_extra")
-        parse_file(funcs, structs, StringStream.new(conf.c_header_extra))
+        cparser.parse_file(funcs, structs, StringStream.new(conf.c_header_extra))
     end
 
     local output_hlc_file <close> = assert(io.open("hlexport.c", "w"), "could not open hlexport.c")
@@ -78,28 +79,28 @@ import luavm.State;
 import luavm.ThreadStatus;
 import luavm.CString;
 
-#if js
 typedef CFunction = State->Int;
-typedef KFunction = (State,Int,NativeUInt)->Int;
-// typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
+typedef KFunction = (State,Int,NativePtr)->Int;
 
 enum FunctionType {
     CFunction;
     KFunction;
 }
 
+#if js
+// typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
 abstract FuncPtr<T:Function>(Int) from Int to Int {}
 
 #else
 @:callable
-private abstract Callable<T:Function>(T) to T {
-	@:from static function fromT<T:Function>(f:T) {
+abstract Callable<T:Function>(T) from T to T {
+	@:from static function ofFunc<T:Function>(f:T) {
 		return cast hl.Api.noClosure(f);
 	}
 }
 
-typedef CFunction = Callable<State->Int>;
-typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
+// typedef CFunction = Callable<State->Int>;
+// typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
 // typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
 #end
 ]])
@@ -115,40 +116,12 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
         "Void", "Int", "Single", "Float", "State", "CString", "CFunction", "KFunction"
     }
 
-    local hx_js_bindings_source = {[[class LuaNative {
-    public static var wasm:Dynamic;
+    local char_types = {"char", "unsigned char", "const char", "const unsigned char", "unsigned const char"}
 
-    public static function init(cb:()->Void) {
-        js.Syntax.code("LuaVM({}).then((wasm) => { {0} = wasm; cb(); })", wasm);
-    }
+    local hx_js_bindings_source = {}
+    local hx_hl_bindings_source = {}
 
-    public static function vmAllocString(str:CString):NativeUInt {
-        var bytes = str.toBytes();
-        var ptr = wasm._malloc(bytes.length + 1);
-        for (i in 0...bytes.length) {
-            wasm.HEAPU8[ptr+i] = bytes.get(i);
-        }
-        wasm.HEAPU8[ptr + bytes.length] = 0;
-        return ptr;
-    }
-    
-    static inline function _freeString(ptr:NativeUInt) {
-        wasm._free(ptr);
-    }
-
-    public static function vmAllocFuncPtr<T:Function>(func:T, funcType:FunctionType):FuncPtr<T> {
-        return cast wasm.addFunction(func, switch (funcType) {
-            case CFunction: "ip";
-            case KFunction: "ipip";
-        });
-    }
-]]
-    }
     local hx_js_wrapper_content = {}
-
-    local hx_hl_bindings_source = {
-        "extern class LuaNative {\n",
-    }
     local hx_hl_wrapper_content = {}
 
     local function write_c_func_def(out, def, arg_names)
@@ -159,11 +132,33 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
             if def.ret ~= "void" then
                 out:write("return ")
             end
+
+            if conf.size_t then
+                if def.ret == "size_t" then
+                    out:write("(")
+                    out:write(conf.size_t)
+                    out:write(")")
+                elseif def.ret == "const size_t" then
+                    out:write("(const ")
+                    out:write(conf.size_t)
+                    out:write(")")
+                end
+            end
+
             out:write(def.name)
             out:write("(")
             out:write(table.concat(arg_names, ", "))
             out:write(");\n")
         end
+    end
+
+    local function type_substitution(arg_type)
+        if arg_type == "size_t" then
+            arg_type = conf.size_t
+        elseif arg_type == "const size_t" then
+            arg_type = "const " .. conf.size_t
+        end
+        return arg_type
     end
 
     local function proc_func_defs(funcdefs, target)
@@ -185,8 +180,10 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
 
         -- assert(stream:eof())
         for _, def in ipairs(funcdefs) do
-            local haxe_ret = haxe_type_mappings[def.ret]
+            local def_ret = type_substitution(def.ret)
+            local haxe_ret = haxe_type_mappings[def_ret]
             if not haxe_ret then
+                print(("%s: no haxe representation for return %s"):format(def.name, def_ret))
                 goto skip_this_def
             end
 
@@ -207,20 +204,26 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
                     goto skip_this_def
                 end
 
-                local map = haxe_type_mappings[arg.type]
+                local arg_type = type_substitution(arg.type)
+                local map = haxe_type_mappings[arg_type]
                 if not map then
                     for _, arg in ipairs(def.args) do
-                        if not haxe_type_mappings[arg.type] then
-                            print(("%s: no haxe representation for %s"):format(def.name, arg.type))
+                        local arg_type = type_substitution(arg.type)
+                        if not haxe_type_mappings[arg_type] then
+                            print(("%s: no haxe representation for %s"):format(def.name, arg_type))
                         end
                     end
 
                     goto skip_this_def
                 end
 
+                -- use actual arg type here, so that it can cast it to size_t
                 if target == "hl" and table.find(func_types, arg.type) then
                     table.insert(arg_names, arg.name .. "->fun")
                     table.insert(param_strs, ("vclosure* %s"):format(arg.name))
+                elseif target == "hl" and arg.type == "size_t" then
+                    table.insert(arg_names, "(size_t)" .. arg.name)
+                    table.insert(param_strs, ("%s %s"):format(conf.size_t, arg.name))
                 else
                     table.insert(arg_names, arg.name)
                     table.insert(param_strs, ("%s %s"):format(arg.type, arg.name))
@@ -292,7 +295,7 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
             tinsert(hx_bindings_source, "):")
 
             if target == "js" and haxe_ret[target_index] == "CString" then
-                tinsert(hx_bindings_source, "NativeUInt")
+                tinsert(hx_bindings_source, "NativePtr")
             else
                 tinsert(hx_bindings_source, haxe_ret[target_index])
             end
@@ -303,7 +306,9 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
                 local param_names = {}
                 local post_call = {}
                 for _, arg in ipairs(def.args) do
-                    local haxe_type = haxe_type_mappings[arg.type][target_index]
+                    local arg_type = type_substitution(arg.type)
+
+                    local haxe_type = haxe_type_mappings[arg_type][target_index]
 
                     if haxe_type == "CString" then
                         tinsert(hx_bindings_source, "        var _")
@@ -403,8 +408,208 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
         return hx_bindings_source, hx_wrapper_content
     end
 
+    local function proc_struct_defs(structdefs, target)
+        local hx_bindings_source, hx_wrapper_content, target_index
+
+        if target == "js" then
+            target_index = 3
+            hx_bindings_source = hx_js_bindings_source
+            hx_wrapper_content = hx_js_wrapper_content
+        
+        elseif target == "hl" then
+            target_index = 2
+            hx_bindings_source = hx_hl_bindings_source
+            hx_wrapper_content = hx_hl_wrapper_content
+
+        else
+            error("invalid target " .. target)
+        end
+
+        local function template_sub(template, member, indentation)
+            indentation = indentation or 0
+            local prefix = string.rep("    ", indentation)
+
+            local lines = stringx.split(template, "\n")
+            local count = string.find(lines[1], "%S")
+            if count then
+                for i, v in ipairs(lines) do
+                    lines[i] = prefix .. string.sub(v, count)
+                end
+            end
+
+            if not string.find(lines[#lines], "%S") then
+                lines[#lines] = "\n"
+            end
+
+            return table.concat(lines, "\n"):gsub("$name", member.name):gsub("$offset", member.offset):gsub("$size", member.size)
+        end
+
+        for _, def in ipairs(structdefs) do
+            local native_size
+            if target == "js" then
+                native_size = 4
+            else
+                native_size = 8
+            end
+
+            local struct = cparser.parse_struct(def, native_size)
+            local struct_conf = conf.exposed_structs[struct.name]
+            local hx_name = struct_conf.hx_name
+
+            if target == "hl" then
+                tinsert(hx_bindings_source, ("abstract %s(hl.Bytes) from hl.Bytes to hl.Bytes {\n"):format(hx_name))
+                tinsert(hx_bindings_source, ("    public static function alloc():%s {\n"):format(hx_name))
+                tinsert(hx_bindings_source, ("        var data = haxe.io.Bytes.alloc(%i);\n"):format(struct.size))
+                tinsert(hx_bindings_source, ("        data.fill(0, %i, 0);\n"):format(struct.size))
+                tinsert(hx_bindings_source,  "        return hl.Bytes.fromBytes(data);\n")
+                tinsert(hx_bindings_source,  "    }\n\n")
+                tinsert(hx_bindings_source,  "    public function free() {}\n")
+
+                for _, member in ipairs(struct.members) do
+                    if not table.find(struct_conf.private_members, member.name) then
+                        if member.base_type == "char" and member.count > 1 then
+                            local template = [[
+                                public var $name(get, set):String;
+                                function get_$name():String {
+                                    var strlen = CString.strLen(this, $offset);
+                                    return this.offset($offset).toBytes(strlen).toString();
+                                }
+
+                                function set_$name(v:String) {
+                                    var bytes = haxe.io.Bytes.ofString(v);
+                                    var l = bytes.length;
+                                    if (l > $size-1) {
+                                        l = $size-1;
+                                    }
+                                    for (i in 0...l) {
+                                        this[$offset+i] = bytes.get(i);
+                                    }
+                                    this[l] = 0;
+                                    return v;
+                                }           
+                            ]]
+                            
+                            local s = template_sub(template, member, 1)
+                            tinsert(hx_bindings_source, s)
+                        elseif member.type == "const char*" then
+                            tinsert(hx_bindings_source, ("    public var %s(get,never):String;\n"):format(member.name))
+                            local template = [[
+                                function get_$name():String {
+                                    var strlen = CString.strLen(this, $offset);
+                                    return this.offset($offset).toBytes(strlen).toString();
+                                }                            
+                            ]]
+                            
+                            local s = template_sub(template, member, 1)
+                            tinsert(hx_bindings_source, s)
+                            -- local map = haxe_type_mappings[member.type]
+                            -- if map == nil then
+                            --     print(("%s: no haxe representation for %s"):format(struct.name, member.type))
+                            --     goto skip_this_mem
+                            -- end
+
+                            -- tinsert(hx_bindings_source, ("    public var %s(get, set):String;\n"):format(member.name))
+                        elseif member.base_type == "float" or member.base_type == "double" then
+                            print(("%s: float or double type not yet implemented"):format(member.name))
+                        elseif member.base_type == "char" then
+                            local template = [[
+                                public var $name(get, set):Int;
+                                function get_$name() return this[$offset];
+                                function set_$name(v:Int) return this[$offset] = v;
+                            ]]
+                            local s = template_sub(template, member, 1)
+                            tinsert(hx_bindings_source, s)
+                        elseif member.base_type == "short" then
+                            local template = [[
+                                public var $name(get, set):Int;
+                                function get_$name() return this.getUI16($offset);
+                                function set_$name(v:Int) {
+                                    this.setUI16($offset, v);
+                                    return v;
+                                }
+                            ]]
+                            local s = template_sub(template, member, 1)
+                            tinsert(hx_bindings_source, s)
+                        elseif member.base_type == "int" or (member.base_type == "size_t" and target == "js") then
+                            local template = [[
+                                public var $name(get, set):Int;
+                                function get_$name() return this.getI32($offset);
+                                function set_$name(v:Int) {
+                                    this.setI32($offset, v);
+                                    return v;
+                                }
+                            ]]
+                            local s = template_sub(template, member, 1)
+                            tinsert(hx_bindings_source, s)
+                        elseif member.base_type == "size_t" then
+                            local template = [[
+                                public var $name(get, set):haxe.Int64;
+                                function get_$name() {
+                                    var low = 0;
+                                    var high = 0;
+                                    LuaNative.luaX_sizet_get(this.offset($offset), new hl.Ref<Int>(low), new hl.Ref<Int>(high));
+                                    return haxe.Int64.make(high, low);
+                                }
+                                
+                                function set_$name(v:haxe.Int64) {
+                                    LuaNative.luaX_sizet_set(this.offset($offset), v.low, v.high);
+                                    return v;
+                                }
+                            ]]
+                            local s = template_sub(template, member, 1)
+                            tinsert(hx_bindings_source, s)
+                        else
+                            print(("%s: unsupported/unimplemented member type %s"):format(struct.name, member.type))
+                        end
+                    end
+
+                    ::skip_this_mem::
+                end
+                tinsert(hx_bindings_source,  "}\n")
+            end
+        end
+    end
+
+    proc_struct_defs(structs, "hl")
+    proc_struct_defs(structs, "js")
+
+    tinsert(hx_js_bindings_source , [[class LuaNative {
+    public static var wasm:Dynamic;
+
+    public static function init(cb:()->Void) {
+        js.Syntax.code("LuaVM({}).then((wasm) => { {0} = wasm; cb(); })", wasm);
+    }
+
+    public static function vmAllocString(str:CString):NativeUInt {
+        var bytes = str.toBytes();
+        var ptr = wasm._malloc(bytes.length + 1);
+        for (i in 0...bytes.length) {
+            wasm.HEAPU8[ptr+i] = bytes.get(i);
+        }
+        wasm.HEAPU8[ptr + bytes.length] = 0;
+        return ptr;
+    }
+    
+    static inline function _freeString(ptr:NativeUInt) {
+        wasm._free(ptr);
+    }
+
+    public static function vmAllocFuncPtr<T:Function>(func:T, funcType:FunctionType):FuncPtr<T> {
+        return cast wasm.addFunction(func, switch (funcType) {
+            case CFunction: "ip";
+            case KFunction: "ipip";
+        });
+    }
+]]
+    )
+
+    tinsert(hx_hl_bindings_source,
+        "extern class LuaNative {\n"
+    )
+
     proc_func_defs(funcs, "hl")
     proc_func_defs(funcs, "js")
+
 
     output_hx_bindings_file:write("\n#if js\n")
     output_hx_bindings_file:write(table.concat(hx_js_bindings_source))

@@ -22,9 +22,15 @@ class FuncHelper {
     static var callCallbackHandle:CFunction;
     #end
 
+    static function isNullPtr(ptr:NativePtr) {
+        if (ptr == null) return true;
+        var adr = ptr.address();
+        return adr.low == 0 && adr.high == 0;
+    }
+
     static function gcCallback(L:luavm.State) {
         var ptr = Lua.l_checkudata(L, 1, HX_CLOSURE_MT);
-        if (!ptr.isNull) {
+        if (!isNullPtr(ptr)) {
             var id = ptr.getI32(0);
             funcMap.remove(id);
         }
@@ -34,7 +40,7 @@ class FuncHelper {
 
     static function callCallback(L:luavm.State) {
         var ptr = Lua.l_checkudata(L, Lua.upvalueindex(1), HX_CLOSURE_MT);
-        if (!ptr.isNull) {
+        if (!isNullPtr(ptr)) {
             var id = ptr.getI32(0);
             var f = funcMap[id];
             if (f != null) {

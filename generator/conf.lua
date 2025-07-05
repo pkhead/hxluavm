@@ -1,11 +1,17 @@
 local conf = {}
 
+conf.size_t = "unsigned int"
+
 -- 1: hl.h type
 -- 2: haxe hl type
 -- 3: haxe js/wasm type
 conf.haxe_type_mappings = {
     ["void"] = {"_VOID", "Void", "Void"},
-    ["void*"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
+    ["void*"] = {"_BYTES", "NativePtr", "NativePtr"},
+    ["char"] = {"_I8", "hl.UI8", "Int"},
+    ["unsigned char"] = {"_I8", "Int", "Int"},
+    ["short"] = {"_I16", "Int", "Int"},
+    ["unsigned short"] = {"_I16", "Int", "Int"},
     ["int"] = {"_I32", "Int", "Int"},
     ["unsigned int"] = {"_I32", "Int", "Int"},
     ["float"] = {"_F32", "Single", "Single"},
@@ -14,21 +20,51 @@ conf.haxe_type_mappings = {
     ["lua_Integer"] = {"_I64", "haxe.Int64", "haxe.Int64"},
     ["lua_State*"] = {"_LSTATE", "State", "State"},
     ["const char*"] = {"_BYTES", "CString", "CString"},
-    ["int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativeUInt"},
-    ["unsigned int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativeUInt"},
-    ["size_t"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
+    ["int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativePtr"},
+    ["unsigned int*"] = {"_REF(_I32)", "hl.Ref<Int>", "NativePtr"},
+    -- ["size_t"] = {"_BYTES", "NativeUInt", "NativeUInt"},
+    ["size_t*"] = {"_BYTES", "NativePtr", "NativePtr"},
 
-    ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "CFunction", "FuncPtr<CFunction>"},
-    ["lua_KFunction"] = {"_FUN(_I32,_LSTATE _I32 _BYTES)", "KFunction", "FuncPtr<KFunction>"},
-    ["lua_KContext"] = {"_BYTES", "hl.Bytes", "NativeUInt"},
+    ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "Callable<CFunction>", "FuncPtr<CFunction>"},
+    ["lua_KFunction"] = {"_FUN(_I32,_LSTATE _I32 _BYTES)", "Callable<KFunction>", "FuncPtr<KFunction>"},
+    ["lua_KContext"] = {"_BYTES", "NativePtr", "NativePtr"},
     -- ["lua_Reader"] = {"_FUN(_BYTES,_LSTATE _BYTES _REF(_I64))", "Reader"}
 }
 
 conf.c_header_extra = [[
 extern int luaX_getregistryindex(void);
+extern void luaX_sizet_get(size_t *addr, int *low, int *high);
+extern void luaX_sizet_set(size_t *addr, unsigned int low, unsigned int high);
 ]]
 
 conf.overrides = {
+    luaX_sizet_get = {
+        ret = "void",
+        args = {
+            { "size_t*", "addr" },
+            { "int*", "low" },
+            { "int*", "high" },
+        },
+        impl = [[
+            size_t v = *addr;
+            *low = (int)(v & 0xFFFFFFFF);
+            *high = (int)((v >> 32) & 0xFFFFFFFF);
+        ]]
+    },
+
+    luaX_sizet_set = {
+        ret = "void",
+        args = {
+            { "size_t*", "addr" },
+            { "unsigned int", "low" },
+            { "unsigned int", "high" }
+        },
+        impl = [[
+            size_t v = (size_t)(low) | ((size_t)(high) << 32);
+            *addr = v;
+        ]]
+    },
+
     luaX_getregistryindex = {
         ret = "int",
         args = {},
@@ -120,18 +156,18 @@ return luaL_error(L, msg);
 ]]
     },
 
-    lua_pushlstring = {
-        ret = "const char*",
-        args = {
-            { "lua_State*", "L" },
-            { "const char*", "s" },
-            { "unsigned int", "len" }
-        },
-        impl =
-        [[
-    return lua_pushlstring(L, s, (size_t)len);
-]]
-    },
+--     lua_pushlstring = {
+--         ret = "const char*",
+--         args = {
+--             { "lua_State*", "L" },
+--             { "const char*", "s" },
+--             { "unsigned int", "len" }
+--         },
+--         impl =
+--         [[
+--     return lua_pushlstring(L, s, (size_t)len);
+-- ]]
+--     },
 
     lua_gc = {
         ret = "int",
@@ -151,24 +187,64 @@ return luaL_error(L, msg);
 ]]
     },
 
-    lua_newuserdatauv = {
-        ret = "void*",
-        args = {
-            { "lua_State*", "L" },
-            { "unsigned int", "sz" },
-            { "int", "nuvalue" }
-        },
-        impl =
-        [[
-    return lua_newuserdatauv(L, (size_t)sz, nuvalue);
-]]
-    }
+--     lua_newuserdatauv = {
+--         ret = "void*",
+--         args = {
+--             { "lua_State*", "L" },
+--             { "unsigned int", "sz" },
+--             { "int", "nuvalue" }
+--         },
+--         impl =
+--         [[
+--     return lua_newuserdatauv(L, (size_t)sz, nuvalue);
+-- ]]
+--     },
+
+    -- luaL_loadbufferx = {
+    --     ret = "int",
+    --     args = {
+    --         { "lua_State*", "L" },
+    --         { "const char*", "buff" },
+    --         { "unsigned int", "sz" },
+    --         { "const char*", "name" },
+    --         { "const char*", "mode" }
+    --     },
+    --     impl = [[
+    --         size_t _sz = (size_t)sz;
+    --         return luaL_loadbufferx(L, buff, _sz, name, mode);
+    --     ]]
+    -- },
+
+    -- luaL_checkversion_ = {
+    --     ret = "void",
+    --     args = {
+    --         { "lua_State*", "L" },
+    --         { "lua_Number", "ver" },
+    --         { "unsigned int", "sz" }
+    --     },
+    --     impl = [[
+    --         size_t _sz = (size_t)sz;
+    --         luaL_checkversion_(L, ver, _sz);
+    --     ]]
+    -- },
+
+    -- lua_stringtonumber = {
+    --     ret = "unsigned int",
+    --     args = {
+    --         { "lua_State*", "L" },
+    --         { "const char*", "s" }
+    --     },
+    --     impl = [[
+    --         size_t ret = lua_stringtonumber(L, s);
+    --         return (unsigned int)ret;
+    --     ]]
+    -- }
 }
 
 conf.exposed_structs = {
     lua_Debug = {
         hx_name = "Debug",
-        private_fields = {"i_ci"}
+        private_members = {"i_ci"}
     }
 }
 
@@ -212,13 +288,9 @@ $<JS>
         return toBytes(L, idx).toString();
     }
 
-    public static function pushBytes(L:State, bytes:haxe.io.Bytes):NativeUInt {
+    public static function pushBytes(L:State, bytes:haxe.io.Bytes):NativePtr {
         return LuaNative.lua_pushlstring(L, new CString(bytes), bytes.length);
     }
-
-    // public static inline function pushstring(L:State, s:String):NativeUInt {
-    //     return pushBytes(L, idx, haxe.io.Bytes.ofString(s));
-    // }
     
     public static function loadBytes(L:State, bytes:haxe.io.Bytes, name:CString, mode:CString):Int {
         return LuaNative.luaL_loadbufferx(L, new CString(bytes), bytes.length, name, mode);
@@ -246,7 +318,7 @@ $<HL>
     }
 
     public static function loadBytes(L:State, bytes:haxe.io.Bytes, name:CString, mode:CString):Int {
-        return LuaNative.luaL_loadbufferx(L, hl.Bytes.fromBytes(bytes), NativeUInt.fromInt(bytes.length), name, mode);
+        return LuaNative.luaL_loadbufferx(L, hl.Bytes.fromBytes(bytes), bytes.length, name, mode);
     }
 
     // public static inline function pushcfunction(L:State, fn:LuaNative.CFunction):Void {
@@ -302,15 +374,15 @@ $<HL>
         return LuaNative.lua_getfield(L, REGISTRYINDEX, tname);
     }
 
-    public static inline function l_checkudata(L:State, ud:Int, tname:String):NativeUInt {
+    public static inline function l_checkudata(L:State, ud:Int, tname:String):NativePtr {
         return LuaNative.luaL_checkudata(L, ud, tname);
     }
     
     public static function l_checkstring(L:State, idx:Int):String {
         #if js
-        var tmpAlloc:NativeUInt = LuaNative.wasm._malloc(4);
+        var tmpAlloc:NativePtr = LuaNative.wasm._malloc(4);
         var ptr = LuaNative.luaL_checklstring(L, idx, tmpAlloc);
-        var str = ptr.getBytes(tmpAlloc.getI32(0)).toString();
+        var str = ptr.toBytes(tmpAlloc.getI32(0)).toString();
         LuaNative.wasm._free(tmpAlloc);
         return str;
         #else
