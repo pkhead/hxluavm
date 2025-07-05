@@ -1,7 +1,6 @@
-package luavm;
+package luavm.util;
 
 import luavm.LuaNative;
-import luavm.Lua;
 
 /**
  * Utility class for pushing Haxe functions.
@@ -13,7 +12,7 @@ import luavm.Lua;
  * This class provides a good workaround for this issue.
  */
 class FuncHelper {
-    private static var funcMap:Map<Int, luavm.State->Int> = [];
+    private static var funcMap:Map<Int, State->Int> = [];
     private static var nextId = 1;
     private static var HX_CLOSURE_MT = "HaxeFunction";
 

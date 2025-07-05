@@ -119,12 +119,12 @@ class ClassWrapperMacros {
                 if (field.meta.has(":luaFunc")) {
                     if (isStatic) {
                         initExprs.push(macro {
-                            luavm.FuncHelper.push(L, @:privateAccess $objIdent.$fieldName);
+                            luavm.util.FuncHelper.push(L, @:privateAccess $objIdent.$fieldName);
                             luavm.Lua.setfield(L, -2, $v{luaFieldName});
                         });
                     } else {
                         initExprs.push(macro {
-                            luavm.FuncHelper.push(L, (L) -> {
+                            luavm.util.FuncHelper.push(L, (L) -> {
                                 var self = getObject(L, 1);
                                 return @:privateAccess $objIdent.$fieldName(L);
                             });
@@ -375,13 +375,13 @@ class ClassWrapperMacros {
 
                     // metatable for static fields
                     luavm.Lua.createtable(L, 0, 0);
-                    luavm.FuncHelper.push(L, luaStaticIndex);
+                    luavm.util.FuncHelper.push(L, luaStaticIndex);
                     luavm.Lua.setfield(L, -2, "__index");
 
-                    luavm.FuncHelper.push(L, luaStaticNewIndex);
+                    luavm.util.FuncHelper.push(L, luaStaticNewIndex);
                     luavm.Lua.setfield(L, -2, "__newindex");
 
-                    luavm.FuncHelper.push(L, luaMetatable);
+                    luavm.util.FuncHelper.push(L, luaMetatable);
                     luavm.Lua.setfield(L, -2, "__metatable");
 
                     luavm.Lua.setmetatable(L, -2);
@@ -392,16 +392,16 @@ class ClassWrapperMacros {
                     // create the class metatable
                     luavm.Lua.l_newmetatable(L, $v{mtName});
 
-                    luavm.FuncHelper.push(L, luaGc);
+                    luavm.util.FuncHelper.push(L, luaGc);
                     luavm.Lua.setfield(L, -2, "__gc");
 
-                    luavm.FuncHelper.push(L, luaIndex);
+                    luavm.util.FuncHelper.push(L, luaIndex);
                     luavm.Lua.setfield(L, -2, "__index");
 
-                    luavm.FuncHelper.push(L, luaNewIndex);
+                    luavm.util.FuncHelper.push(L, luaNewIndex);
                     luavm.Lua.setfield(L, -2, "__newindex");
 
-                    luavm.FuncHelper.push(L, luaMetatable);
+                    luavm.util.FuncHelper.push(L, luaMetatable);
                     luavm.Lua.setfield(L, -2, "__metatable");
                 }
 

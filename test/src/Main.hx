@@ -4,7 +4,7 @@ import luavm.LuaNative;
 import luavm.Lua;
 import luavm.State;
 import luavm.ThreadStatus;
-import luavm.FuncHelper;
+import luavm.util.FuncHelper;
 import luavm.util.ClassWrapper;
 
 class Main {
