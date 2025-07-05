@@ -99,8 +99,8 @@ class Main {
             ClassWrapper.pushClass(L, TestClass);
             Lua.setglobal(L, "TestClass");
 
-            ClassWrapper.pushClass(L, TestClass2);
-            Lua.setglobal(L, "TestClass2");
+            ClassWrapper.pushClass(L, LuaFloatArray);
+            Lua.setglobal(L, "FloatArray");
 
             #if sys
             var str = sys.io.File.getContent("code.lua");

@@ -4,51 +4,70 @@ import luavm.Lua;
 import luavm.util.ClassWrapper;
 
 @:luaExpose
-class TestClass {
-    public static final CONST = 3;
-    public var a:Null<Int> = 2;
-    public var notNull:Int = 9;
+class LuaFloatArray {
+    var array:Array<Float>;
 
-    var b:String = "Hi";
+    public var length(get, never):Int;
+    inline function get_length() return array.length;
 
-    // @:luaHide
-    @:luaName("inst_var")
-    public var inst:TestClass2;
-
-    @:luaFunc
-    function someFunc(L:luavm.State) {
-        luavm.Lua.pushstring(L, "TESTTESTTEST");
+    @:luaFunc @:luaName("get")
+    function luaGet(L:luavm.State):Int {
+        var i = Lua.l_checkinteger(L, 2);
+        Lua.pushnumber(L, array[i-1]);
         return 1;
+    }
+
+    @:luaFunc @:luaName("set")
+    function luaSet(L:luavm.State):Int {
+        var i = Lua.l_checkinteger(L, 2);
+        var v = Lua.l_checknumber(L, 3);
+        array[i-1] = v;
+        return 0;
+    }
+
+    @:luaFunc @:luaName("push")
+    function luaPush(L:luavm.State):Int {
+        var v = Lua.l_checknumber(L, 2);
+        array.push(v);
+        return 0;
     }
 
     @:luaFunc @:luaName("new")
-    static function luaCtor(L:luavm.State):Int {
-        var a = Lua.tointeger(L, 1);
-        var b = Lua.tostring(L, 2);
-        ClassWrapper.push(L, new TestClass(a, b));
+    static function luaNew(L:luavm.State):Int {
+        ClassWrapper.push(L, new LuaFloatArray());
         return 1;
     }
 
-    public function new(a:Int, b:String) {
-        this.a = a;
-        this.b = b;
-        this.inst = null;
+    public function new() {
+        array = [];
     }
 }
 
 @:luaExpose
-class TestClass2 {
-    public static final CONST2 = "HIDSA";
+class TestClass {
+    public static final CONST = 3;
 
-    public var a:Int = 2;
-    public var b:String = "Hi";
+    @:luaName("int_field")
+    public var intField:Int;
 
-    public function someFunc() {
-        
+    @:luaName("string_field")
+    public var stringField:String;
+
+    @:luaName("array_field")
+    public var arrayField:LuaFloatArray;
+
+    @:luaFunc @:luaName("new")
+    static function luaCtor(L:luavm.State):Int {
+        var int = Lua.l_checkinteger(L, 1);
+        var str = Lua.l_checkstring(L, 2);
+        var arr = ClassWrapper.checkType(L, 3, LuaFloatArray);
+        ClassWrapper.push(L, new TestClass(int, str, arr));
+        return 1;
     }
 
-    public function new(a:Int, b:String) {
-        this.a = a;
-        this.b = b;
+    public function new(int:Int, str:String, arr:LuaFloatArray) {
+        intField = int;
+        stringField = str;
+        arrayField = arr;
     }
 }
