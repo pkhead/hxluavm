@@ -1,3 +1,2 @@
-local v = testInstance1.inst
-testInstance1.inst = nil
-print(testInstance1.inst)
+local inst = TestClass.new(3, "hi")
+print(inst:someFunc())

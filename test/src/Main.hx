@@ -53,9 +53,7 @@ class Main {
     // }
 
     public static function main() {
-        Lua.init(() -> {
-            trace("initialization done");
-            
+        Lua.init(() -> {            
             var L = Lua.l_newstate();
             Lua.l_openlibs(L);
             FuncHelper.init(L);
@@ -97,22 +95,21 @@ class Main {
             Lua.setglobal(L, "warn");
             #end
 
-            var b = new TestClass(4, "hi");
-            ClassWrapper.push(L, b);
-            Lua.setglobal(L, "testInstance1");
-            ClassWrapper.push(L, b);
-            Lua.setglobal(L, "testInstance2");
+            // ClassWrapper.push(L, new TestClass(4, "hi"));
+            ClassWrapper.pushClass(L, TestClass);
+            Lua.setglobal(L, "TestClass");
 
-            ClassWrapper.push(L, new TestClass(10, "ab"));
-            Lua.setglobal(L, "testInstance3");
-
-            // ClassWrapper.push(L, b);
+            ClassWrapper.pushClass(L, TestClass2);
+            Lua.setglobal(L, "TestClass2");
 
             #if sys
             var str = sys.io.File.getContent("code.lua");
             #else
             var str = Macros.getLuaSource();
             #end
+            
+            trace("SOURCE:\n\n" + str);
+
             if (Lua.l_loadstring(L, str) != cast ThreadStatus.Ok) {
                 trace("parse error!");
                 trace(Lua.tostring(L, -1));

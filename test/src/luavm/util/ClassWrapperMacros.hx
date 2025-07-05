@@ -33,60 +33,82 @@ class ClassWrapperMacros {
         }
     }
 
-    static function luaIndexClassField(field:ClassField, cases:Array<Case>, regName:String, initExprs:Array<Expr>) {
+    static function getFieldName(field:ClassField) {
+        return if (field.meta.has(":luaName")) {
+            switch (field.meta.extract(":luaName")[0].params[0].expr) {
+                case EConst(CString(s, DoubleQuotes)):
+                    s;
+
+                default: Context.error("@:luaName must have a literal string as the first parameter.", Context.currentPos());
+            }
+        } else {
+            field.name;
+        }
+    }
+
+    static function luaIndexClassField(classPos:Position, objIdent:Expr, isStatic:Bool, field:ClassField, cases:Array<Case>, regName:String, initExprs:Array<Expr>) {
         if (field.meta.has(":luaHide")) return;
         var fieldName = field.name;
-        var caseValue = macro $v{fieldName};
+        var luaFieldName = getFieldName(field);
+        var caseValue = macro $v{luaFieldName};
 
         switch (field.kind) {
-            case FVar(AccNormal|AccCall, _):
-                var fieldExpr = macro self.$fieldName;
+            case FVar(AccNormal|AccCall, _) if (field.isPublic):
+                var fieldExpr = macro $objIdent.$fieldName;
 
-                var caseExpr = switch (field.type) {
-                    case TAbstract(atr, params):
-                        var atrStr = atr.toString();
+                function parse(t:Type) {
+                    return switch (t) {
+                        case TAbstract(atr, params):
+                            var atrStr = atr.toString();
 
-                        if (atrStr == "Null" && params.length == 1) {
-                            macro if ($e{fieldExpr} == null) {
-                                luavm.Lua.pushnil(L);
-                            } else {
-                                $e{fieldGetPrim(fieldExpr, TypeTools.toString(params[0]))};
+                            if (atrStr == "Null" && params.length == 1) {
+                                macro if ($e{fieldExpr} == null) {
+                                    luavm.Lua.pushnil(L);
+                                } else {
+                                    $e{fieldGetPrim(fieldExpr, TypeTools.toString(params[0]))};
+                                }
                             }
-                        }
-                        #if target.static
-                        else if (params.length == 0) {
-                            fieldGetPrim(fieldExpr, atrStr);
-                        } else {
-                            typeErr(atrStr);
-                        }
-                        #else
-                        else if (params.length == 0) {
-                            macro if ($e{fieldExpr} == null) {
-                                luavm.Lua.pushnil(L);
+                            #if target.static
+                            else if (params.length == 0) {
+                                fieldGetPrim(fieldExpr, atrStr);
                             } else {
-                                $e{fieldGetPrim(fieldExpr, atrStr)};
+                                typeErr(atrStr);
                             }
-                        } else {
-                            typeErr(atrStr);
-                        }
-                        #end
-                        // macro luavm.Lua.pushnil(L);
-                    
-                    case TInst(tr, params):
-                        macro {
-                            if ($e{fieldExpr} == null) {
-                                luavm.Lua.pushnil(L);
+                            #else
+                            else if (params.length == 0) {
+                                macro if ($e{fieldExpr} == null) {
+                                    luavm.Lua.pushnil(L);
+                                } else {
+                                    $e{fieldGetPrim(fieldExpr, atrStr)};
+                                }
                             } else {
-                                $e{switch (tr.toString()) {
-                                    case "String": macro luavm.Lua.pushstring(L, $e{fieldExpr});
-                                    default: macro luavm.util.ClassWrapper.push(L, $e{fieldExpr});
-                                    // default: Context.fatalError('LuaClassWrapper does not support $tr type for a class field.', Context.currentPos());
-                                }}
+                                typeErr(atrStr);
                             }
-                        }                    
+                            #end
+                            // macro luavm.Lua.pushnil(L);
+                        
+                        case TInst(tr, params):
+                            macro {
+                                if ($e{fieldExpr} == null) {
+                                    luavm.Lua.pushnil(L);
+                                } else {
+                                    $e{switch (tr.toString()) {
+                                        case "String": macro luavm.Lua.pushstring(L, $e{fieldExpr});
+                                        default: macro luavm.util.ClassWrapper.push(L, $e{fieldExpr});
+                                        // default: Context.fatalError('LuaClassWrapper does not support $tr type for a class field.', Context.currentPos());
+                                    }}
+                                }
+                            }  
+                            
+                        // ???
+                        case TLazy(f):
+                            parse(f());
 
-                    case v: typeErr(TypeTools.toString(v));
-                };
+                        case v: typeErr(TypeTools.toString(v));
+                    };
+                }
+
+                var caseExpr = parse(field.type);
 
                 cases.push({
                     values: [caseValue],
@@ -95,19 +117,24 @@ class ClassWrapperMacros {
             
             case FMethod(k):
                 if (field.meta.has(":luaFunc")) {
-                    var funcKeyName = "fun_" + fieldName;
-
-                    initExprs.push(macro {
-                        luavm.FuncHelper.push(L, (L) -> {
-                            var self = getObject(L, 1);
-                            return @:privateAccess self.$fieldName(L);
+                    if (isStatic) {
+                        initExprs.push(macro {
+                            luavm.FuncHelper.push(L, @:privateAccess $objIdent.$fieldName);
+                            luavm.Lua.setfield(L, -2, $v{luaFieldName});
                         });
-                        luavm.Lua.setfield(L, -2, $v{funcKeyName});
-                    });
+                    } else {
+                        initExprs.push(macro {
+                            luavm.FuncHelper.push(L, (L) -> {
+                                var self = getObject(L, 1);
+                                return @:privateAccess $objIdent.$fieldName(L);
+                            });
+                            luavm.Lua.setfield(L, -2, $v{luaFieldName});
+                        });
+                    }
 
                     var caseExpr = macro {
                         luavm.Lua.getfield(L, luavm.Lua.REGISTRYINDEX, $v{regName});
-                        luavm.Lua.getfield(L, -1, $v{funcKeyName});
+                        luavm.Lua.getfield(L, -1, $v{luaFieldName});
                     }
 
                     cases.push({
@@ -119,57 +146,65 @@ class ClassWrapperMacros {
         }
     }
 
-    static function luaNewIndexClassField(field:ClassField, cases:Array<Case>) {
+    static function luaNewIndexClassField(classPos:Position, objIdent:Expr, isStatic:Bool, field:ClassField, cases:Array<Case>) {
         if (field.meta.has(":luaHide")) return;
         var fieldName = field.name;
-        var caseValue = macro $v{fieldName};
+        var caseValue = macro $v{getFieldName(field)};
 
         switch (field.kind) {
-            case FVar(_, AccNormal|AccCall):
-                var fieldExpr = macro self.$fieldName;
-                
-                var caseExpr = switch (field.type) {
-                    case TAbstract(atr, params):
-                        var atrStr = atr.toString();
+            case FVar(_, AccNormal|AccCall) if (!field.isFinal && field.isPublic):
+                var fieldExpr = macro $objIdent.$fieldName;
 
-                        if (atrStr == "Null" && params.length == 1) {
-                            macro if (luavm.Lua.isnoneornil(L, 3)) {
-                                $e{fieldExpr} = null;
+                function parse(t:Type):Expr {
+                    return switch (t) {
+                        case TAbstract(atr, params):
+                            var atrStr = atr.toString();
+
+                            if (atrStr == "Null" && params.length == 1) {
+                                macro if (luavm.Lua.isnoneornil(L, 3)) {
+                                    $e{fieldExpr} = null;
+                                } else {
+                                    $e{fieldSetPrim(fieldExpr, TypeTools.toString(params[0]))}
+                                }
+                            } else if (params.length == 0) {
+                                fieldSetPrim(fieldExpr, atrStr);
                             } else {
-                                $e{fieldSetPrim(fieldExpr, TypeTools.toString(params[0]))}
+                                typeErr(atrStr);
                             }
-                        } else if (params.length == 0) {
-                            fieldSetPrim(fieldExpr, atrStr);
-                        } else {
-                            typeErr(atrStr);
-                        }
-                    
-                    case TInst(tr, params):
-                        macro {
-                            if (luavm.Lua.isnoneornil(L, 3)) {
-                                $e{fieldExpr} = null;
-                            } else {
-                                $e{switch (tr.toString()) {
-                                    case "String": macro $e{fieldExpr} = luavm.Lua.l_checkstring(L, 3);
-                                    default:
-                                        var complexType = TypeTools.toComplexType(
-                                            TInst(tr, params)
-                                        );
-                                        var className = getTypeWrapper(complexType);
+                        
+                        case TInst(tr, params):
+                            macro {
+                                if (luavm.Lua.isnoneornil(L, 3)) {
+                                    $e{fieldExpr} = null;
+                                } else {
+                                    $e{switch (tr.toString()) {
+                                        case "String": macro $e{fieldExpr} = luavm.Lua.l_checkstring(L, 3);
+                                        default:
+                                            var complexType = TypeTools.toComplexType(
+                                                TInst(tr, params)
+                                            );
+                                            var className = getTypeWrapper(complexType);
 
-                                        macro {
-                                            var v = $i{className}.getObject(L, 3);
-                                            if (v == null) {
-                                                return luavm.Lua.l_error(L, "internal error: invalid object");
+                                            macro {
+                                                var v = $i{className}.getObject(L, 3);
+                                                if (v == null) {
+                                                    return luavm.Lua.l_error(L, "internal error: invalid object");
+                                                }
+                                                $e{fieldExpr} = v;
                                             }
-                                            $e{fieldExpr} = v;
-                                        }
-                                }}
+                                    }}
+                                }
                             }
-                        }
+                        
+                        case TLazy(f):
+                            parse(f());
 
-                    case v: typeErr(TypeTools.toString(v));
-                };
+                        case v: typeErr(TypeTools.toString(v));
+                        // case v: macro null;
+                    };
+                }
+                
+                var caseExpr = parse(field.type);
 
                 cases.push({
                     values: [caseValue],
@@ -180,20 +215,19 @@ class ClassWrapperMacros {
         }
     }
 
-    static function getTypeWrapperClassName(t:ComplexType) {
-        var fullName = ComplexTypeTools.toString(t);
-        return "LuaClassWrapper__" + StringTools.replace(fullName, ".", "_");
-    }
-
     static function getTypeWrapper(t:ComplexType) {
         var fullName = ComplexTypeTools.toString(t);
 
         var typeWrapper = typeWrappers[fullName];
-        var typeWrapperClassName = getTypeWrapperClassName(t);
+        var typeWrapperClassName = "LuaClassWrapper__" + StringTools.replace(fullName, ".", "_");
+        
         if (typeWrapper == null) {
+            // trace("getTypeWrapper " + fullName);
+            // temp
+            // typeWrappers[fullName] = macro class {}
+
             var mtName = fullName;
-            var classDataName = "hxwrap_dt_" + fullName;
-            
+            var classDataName = "hxwrap_static_" + fullName;
             var initExprs:Array<Expr> = [];
 
             var indexSwitch = macro switch (key) {
@@ -204,29 +238,66 @@ class ClassWrapperMacros {
                 default: return luavm.Lua.l_error(L, "could not set " + key);
             };
 
-            switch (indexSwitch.expr) {
-                case ESwitch(_, indexCases, _):
-                    switch (newIndexSwitch.expr) {
-                        case ESwitch(_, newIndexCases, _):
-                            var tResolv = Context.resolveType(t, Context.currentPos());
-                            switch (tResolv) {
-                                case TInst(ctr, _):
-                                    var ct = ctr.get();
-                                    if (!ct.meta.has(":luaExpose"))
-                                        Context.error('Cannot wrap type $fullName, as it does not have the @:luaExpose metadata.', Context.currentPos());
-        
-                                    for (field in ct.fields.get()) {
-                                        luaIndexClassField(field, indexCases, classDataName, initExprs);
-                                        luaNewIndexClassField(field, newIndexCases);
-                                    }
-        
-                                default: Context.fatalError("Cannot wrap type " + fullName, Context.currentPos());
-                            }
+            var staticIndexSwitch = macro switch (key) {
+                default: return luavm.Lua.l_error(L, "could not get " + key);
+            };
 
-                        default:
+            var staticNewIndexSwitch = macro switch (key) {
+                default: return luavm.Lua.l_error(L, "could not set " + key);
+            };
+
+            var indexCases:Array<Case>;
+            var newIndexCases:Array<Case>;
+            var staticIndexCases:Array<Case>;
+            var staticNewIndexCases:Array<Case>;
+
+            switch (indexSwitch.expr) {
+                case ESwitch(_, cases, _):
+                    indexCases = cases;
+                default:
+            }
+
+            switch (newIndexSwitch.expr) {
+                case ESwitch(_, cases, _):
+                    newIndexCases = cases;
+                default:
+            }
+
+            switch (staticIndexSwitch.expr) {
+                case ESwitch(_, cases, _):
+                    staticIndexCases = cases;
+                default:
+            }
+
+            switch (staticNewIndexSwitch.expr) {
+                case ESwitch(_, cases, _):
+                    staticNewIndexCases = cases;
+                default:
+            }
+            
+            var tResolv = Context.resolveType(t, Context.currentPos());
+            switch (tResolv) {
+                case TInst(ctr, _):
+                    var ct = ctr.get();
+                    if (!ct.meta.has(":luaExpose"))
+                        Context.error('Cannot wrap type $fullName, as it does not have the @:luaExpose metadata.', Context.currentPos());
+                    
+                    // init static fields
+                    for (field in ct.statics.get()) {
+                        var id = macro $p{fullName.split(".")};
+                        luaIndexClassField(ct.pos, id, true, field, staticIndexCases, classDataName, initExprs);
+                        luaNewIndexClassField(ct.pos, id, true, field, staticNewIndexCases);
                     }
 
-                default:
+                    for (field in ct.fields.get()) {
+                        var id = macro $i{"self"};
+                        // trace(field.name);
+                        // trace(field.type);
+                        luaIndexClassField(ct.pos, id, false, field, indexCases, classDataName, initExprs);
+                        luaNewIndexClassField(ct.pos, id, false, field, newIndexCases);
+                    }
+
+                default: Context.fatalError("Cannot wrap type " + fullName, Context.currentPos());
             }
             
             typeWrapper = macro class $typeWrapperClassName {
@@ -272,11 +343,53 @@ class ClassWrapperMacros {
                     return 0;
                 }
 
+                static function luaStaticIndex(L:luavm.State):Int {
+                    // var self = getObject(L, 1);
+                    var key = luavm.Lua.l_checkstring(L, 2);
+
+                    $e{staticIndexSwitch};
+
+                    return 1;
+                }
+
+                static function luaStaticNewIndex(L:luavm.State):Int {
+                    // var self = getObject(L, 1);
+                    var key = luavm.Lua.l_checkstring(L, 2);
+
+                    $e{staticNewIndexSwitch};
+
+                    return 1;
+                }
+
+                static function luaMetatable(L:luavm.State):Int {
+                    luavm.Lua.pushstring(L, "metatable is locked");
+                    return 1;
+                }
+
                 static function init(L:luavm.State) {
+                    // create static class table
                     luavm.Lua.createtable(L, 0, 0);
+
+                    // method functions will be stored in the static class table
                     $b{initExprs};
+
+                    // metatable for static fields
+                    luavm.Lua.createtable(L, 0, 0);
+                    luavm.FuncHelper.push(L, luaStaticIndex);
+                    luavm.Lua.setfield(L, -2, "__index");
+
+                    luavm.FuncHelper.push(L, luaStaticNewIndex);
+                    luavm.Lua.setfield(L, -2, "__newindex");
+
+                    luavm.FuncHelper.push(L, luaMetatable);
+                    luavm.Lua.setfield(L, -2, "__metatable");
+
+                    luavm.Lua.setmetatable(L, -2);
+
+                    // store the static class table to the registry
                     luavm.Lua.setfield(L, luavm.Lua.REGISTRYINDEX, $v{classDataName});
 
+                    // create the class metatable
                     luavm.Lua.l_newmetatable(L, $v{mtName});
 
                     luavm.FuncHelper.push(L, luaGc);
@@ -287,6 +400,16 @@ class ClassWrapperMacros {
 
                     luavm.FuncHelper.push(L, luaNewIndex);
                     luavm.Lua.setfield(L, -2, "__newindex");
+
+                    luavm.FuncHelper.push(L, luaMetatable);
+                    luavm.Lua.setfield(L, -2, "__metatable");
+                }
+
+                static function getOrInitMetatable(L:luavm.State) {
+                    if (luavm.Lua.getfield(L, luavm.Lua.REGISTRYINDEX, $v{mtName}) == cast luavm.LuaType.TNil) {
+                        luavm.Lua.pop(L, 1);
+                        init(L);
+                    }
                 }
 
                 public static function push(L:luavm.State, v:$t) {
@@ -298,17 +421,19 @@ class ClassWrapperMacros {
                         udPtr.setI32(0, nextId);
                         wrapIDs[nextId] = v;
                         
-                        if (luavm.Lua.getfield(L, luavm.Lua.REGISTRYINDEX, $v{mtName}) == cast luavm.LuaType.TNil) {
-                            luavm.Lua.pop(L, 1);
-                            init(L);
-                        }
-                        
+                        getOrInitMetatable(L);
                         luavm.Lua.setmetatable(L, -2);
 
                         luavm.Lua.pushvalue(L, -1);
                         wrapCache[v] = luavm.Lua.l_ref(L, luavm.Lua.REGISTRYINDEX);
                         nextId++;
                     }
+                }
+
+                public static function pushStatic(L:luavm.State) {
+                    getOrInitMetatable(L);
+                    luavm.Lua.pop(L, 1);
+                    luavm.Lua.getfield(L, luavm.Lua.REGISTRYINDEX, $v{classDataName});
                 }
             }
 
@@ -328,8 +453,30 @@ class ClassWrapperMacros {
 
     public static function pushObjectWrapper(L:Expr, v:Expr):Expr {
         var argType = Context.follow(Context.typeof(v));
-        var wrapper:String = getTypeWrapper(TypeTools.toComplexType(argType));
+        var wrapper = getTypeWrapper(TypeTools.toComplexType(argType));
         return macro $i{wrapper}.push($L, $v);
+    }
+
+    public static function pushObjectClass(L:Expr, t:Expr):Expr {
+        var tType = Context.typeof(t);
+        switch (tType) {
+            case TType(tr, params):
+                var t = tr.get();
+                var nm = t.name;
+
+                // idk how else to do this
+                // name is "Class<T>", check that it is in that format and extract the T string
+                if (nm.substr(0, 6) == "Class<" && nm.substring(nm.length-1) == ">") {
+                    var typeName = nm.substring(6, nm.length - 1);
+                    var wrapper = getTypeWrapper(TypeTools.toComplexType(Context.getType(typeName)));
+                    return macro $i{wrapper}.pushStatic($L);
+                }
+
+            default:
+        }
+
+        Context.error("expected Class<T> type, got " + TypeTools.toString(tType), Context.currentPos());
+        return macro null;
     }
     #end
 }
