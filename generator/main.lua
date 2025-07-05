@@ -643,6 +643,8 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
                         tinsert(hx_bindings_source, ");\n")
 
                         tinsert(param_names, "_" .. arg.name)
+                    elseif haxe_type == "haxe.Int64" then
+                        tinsert(param_names, ("js.Syntax.code(\"(BigInt({0}.low) | (BigInt({0}.high) << 32n))\", %s)"):format(arg.name))
                     else
                         tinsert(param_names, arg.name)
                     end
@@ -659,7 +661,15 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
                 tinsert(hx_bindings_source, ");\n")
                 tinsert(hx_bindings_source, table.concat(post_call))
                 if def.ret ~= "void" then
-                    tinsert(hx_bindings_source, "        return _res_;\n")
+                    tinsert(hx_bindings_source, "        return ")
+
+                    if haxe_ret[target_index] == "haxe.Int64" then
+                        tinsert(hx_bindings_source, "haxe.Int64.make(js.Syntax.code(\"Number({0} >> 32n)\", _res_), js.Syntax.code(\"Number({0})\", _res_))")
+                    else
+                        tinsert(hx_bindings_source, "_res_")
+                    end
+
+                    tinsert(hx_bindings_source, ";\n")
                 end
                 tinsert(hx_bindings_source, "    }\n")
             else

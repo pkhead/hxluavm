@@ -312,10 +312,27 @@ $<HL>
         return ptr.hlBytes.toBytes(len).toString();
         #end
     }
+    
+    public static inline function l_checkinteger(L:State, idx:Int):Int {
+        return LuaNative.luaL_checkinteger(L, idx).low;
+    }
+
+    public static inline function l_checkinteger64(L:State, idx:Int):haxe.Int64 {
+        return LuaNative.luaL_checkinteger(L, idx);
+    }
 
     public static inline function upvalueindex(i:Int) {
         return REGISTRYINDEX - i;
     }
+
+    public static inline function isfunction(L:State, idx:Int) return LuaNative.lua_type(L, idx) == cast LuaType.TFunction;
+    public static inline function istable(L:State, idx:Int) return LuaNative.lua_type(L, idx) == cast LuaType.TTable;
+    public static inline function islightuserdata(L:State, idx:Int) return LuaNative.lua_type(L, idx) == cast LuaType.TLightUserData;
+    public static inline function isnil(L:State, idx:Int) return LuaNative.lua_type(L, idx) == cast LuaType.TNil;
+    public static inline function isboolean(L:State, idx:Int) return LuaNative.lua_type(L, idx) == cast LuaType.TBoolean;
+    public static inline function isthread(L:State, idx:Int) return LuaNative.lua_type(L, idx) == cast LuaType.TThread;
+    public static inline function isnone(L:State, idx:Int) return LuaNative.lua_type(L, idx) == cast LuaType.TNone;
+    public static inline function isnoneornil(L:State, idx:Int) return LuaNative.lua_type(L, idx) <= 0;
 }
 ]]
 

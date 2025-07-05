@@ -99,6 +99,14 @@ class Main {
 
             var b = new TestClass(4, "hi");
             ClassWrapper.push(L, b);
+            Lua.setglobal(L, "testInstance1");
+            ClassWrapper.push(L, b);
+            Lua.setglobal(L, "testInstance2");
+
+            ClassWrapper.push(L, new TestClass(10, "ab"));
+            Lua.setglobal(L, "testInstance3");
+
+            // ClassWrapper.push(L, b);
 
             #if sys
             var str = sys.io.File.getContent("code.lua");

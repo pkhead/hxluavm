@@ -1,3 +1,3 @@
-print(add(4, 8), add(1, 9))
-
-warn("this is a warning.");
+local v = testInstance1.inst
+testInstance1.inst = nil
+print(testInstance1.inst)

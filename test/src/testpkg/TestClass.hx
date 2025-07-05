@@ -2,14 +2,17 @@ package testpkg;
 
 @:luaExpose
 class TestClass {
-    public var a:Int = 2;
+    public var a:Null<Int> = 2;
+    public var notNull:Int = 9;
     public var b:String = "Hi";
 
-    @:luaHide
+    // @:luaHide
     public var inst:TestClass2;
 
-    public function someFunc() {
-        
+    @:luaFunc
+    function someFunc(L:luavm.State) {
+        luavm.Lua.pushstring(L, "TESTTESTTEST");
+        return 1;
     }
 
     public function new(a:Int, b:String) {
@@ -19,7 +22,7 @@ class TestClass {
     }
 }
 
-// @:luaExpose
+@:luaExpose
 class TestClass2 {
     public var a:Int = 2;
     public var b:String = "Hi";
