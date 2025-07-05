@@ -8,7 +8,8 @@ class TestClass {
     public static final CONST = 3;
     public var a:Null<Int> = 2;
     public var notNull:Int = 9;
-    public var b:String = "Hi";
+
+    var b:String = "Hi";
 
     // @:luaHide
     @:luaName("inst_var")

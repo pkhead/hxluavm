@@ -53,8 +53,8 @@ class ClassWrapperMacros {
         var caseValue = macro $v{luaFieldName};
 
         switch (field.kind) {
-            case FVar(AccNormal|AccCall, _) if (field.isPublic):
-                var fieldExpr = macro $objIdent.$fieldName;
+            case FVar(AccNormal|AccCall, _) if (field.isPublic || field.meta.has(":luaExpose")):
+                var fieldExpr = macro @:privateAccess $objIdent.$fieldName;
 
                 function parse(t:Type) {
                     return switch (t) {
@@ -152,8 +152,8 @@ class ClassWrapperMacros {
         var caseValue = macro $v{getFieldName(field)};
 
         switch (field.kind) {
-            case FVar(_, AccNormal|AccCall) if (!field.isFinal && field.isPublic):
-                var fieldExpr = macro $objIdent.$fieldName;
+            case FVar(_, AccNormal|AccCall) if (!field.isFinal && (field.isPublic || field.meta.has(":luaExpose"))):
+                var fieldExpr = macro @:privateAccess $objIdent.$fieldName;
 
                 function parse(t:Type):Expr {
                     return switch (t) {
