@@ -7,7 +7,7 @@ It uses a Lua script to read Lua headers and a configuration file to generate a 
 Requirements:
 - GNU Make
 - Lua 5.4+ interpreter
-- C compiler
+- GCC-compatible C compiler
 - Emscripten compiler, if you want to build for the JS target.
 
 > [!important]
