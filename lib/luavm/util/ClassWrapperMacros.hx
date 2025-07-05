@@ -215,7 +215,7 @@ class ClassWrapperMacros {
         }
     }
 
-    static function getTypeWrapper(t:ComplexType) {
+    public static function getTypeWrapper(t:ComplexType) {
         var fullName = ComplexTypeTools.toString(t);
 
         var typeWrapper = typeWrappers[fullName];
@@ -457,7 +457,7 @@ class ClassWrapperMacros {
         return macro $i{wrapper}.push($L, $v);
     }
 
-    public static function pushObjectClass(L:Expr, t:Expr):Expr {
+    public static function parseClassType(t:Expr):ComplexType {
         var tType = Context.typeof(t);
         switch (tType) {
             case TType(tr, params):
@@ -468,15 +468,19 @@ class ClassWrapperMacros {
                 // name is "Class<T>", check that it is in that format and extract the T string
                 if (nm.substr(0, 6) == "Class<" && nm.substring(nm.length-1) == ">") {
                     var typeName = nm.substring(6, nm.length - 1);
-                    var wrapper = getTypeWrapper(TypeTools.toComplexType(Context.getType(typeName)));
-                    return macro $i{wrapper}.pushStatic($L);
+                    return TypeTools.toComplexType(Context.getType(typeName));
                 }
 
             default:
         }
 
         Context.error("expected Class<T> type, got " + TypeTools.toString(tType), Context.currentPos());
-        return macro null;
+        return null;
+    }
+
+    public static function pushObjectClass(L:Expr, t:Expr):Expr {
+        var wrapper = getTypeWrapper(parseClassType(t));
+        return macro $i{wrapper}.pushStatic($L);
     }
     #end
 }
