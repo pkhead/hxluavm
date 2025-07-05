@@ -318,7 +318,7 @@ abstract Callable<T:Function>(T) from T to T {
                     if haxe_type == "CString" then
                         tinsert(hx_bindings_source, "        var _")
                         tinsert(hx_bindings_source, arg.name)
-                        tinsert(hx_bindings_source, " = vmAllocString(")
+                        tinsert(hx_bindings_source, " = allocString(")
                         tinsert(hx_bindings_source, arg.name)
                         tinsert(hx_bindings_source, ");\n")
 
@@ -605,7 +605,7 @@ abstract Callable<T:Function>(T) from T to T {
         js.Syntax.code("LuaVM({}).then((wasm) => { {0} = wasm; cb(); })", wasm);
     }
 
-    public static function vmAllocString(str:CString):NativeUInt {
+    public static function allocString(str:CString):NativeUInt {
         var bytes = str.toBytes();
         var ptr = wasm._malloc(bytes.length + 1);
         for (i in 0...bytes.length) {
@@ -619,7 +619,7 @@ abstract Callable<T:Function>(T) from T to T {
         wasm._free(ptr);
     }
 
-    public static function vmAllocFuncPtr<T:Function>(func:T, funcType:FunctionType):FuncPtr<T> {
+    public static function allocFuncPtr<T:Function>(func:T, funcType:FunctionType):FuncPtr<T> {
         return cast wasm.addFunction(func, switch (funcType) {
             case CFunction: "ip";
             case KFunction: "ipip";

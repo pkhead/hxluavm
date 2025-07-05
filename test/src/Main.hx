@@ -53,6 +53,10 @@ class Main {
     //     Lua.close(state);
     // }
 
+    static function luaHook(L:luavm.State, ar:DebugPtr) {
+        trace("hook activated", ar.event);
+    }
+
     public static function main() {
         Lua.init(() -> {            
             var L = Lua.l_newstate();
@@ -125,9 +129,11 @@ class Main {
                 return 0;
             });
 
-            var f = (L, ar:DebugPtr) -> {
-                trace("hook activated", ar.event);
-            };
+            #if js
+            var f = LuaNative.allocFuncPtr(luaHook, Hook);
+            #else
+            var f = luaHook;
+            #end
 
             Lua.sethook(L, f, HookMask.MaskLine, 0);
 

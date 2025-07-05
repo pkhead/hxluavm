@@ -57,8 +57,8 @@ class FuncHelper {
      */
     public static function init(L:luavm.State) {
         #if js
-        var gcFuncHandle = LuaNative.vmAllocFuncPtr(gcCallback, CFunction);
-        callCallbackHandle = LuaNative.vmAllocFuncPtr(callCallback, CFunction);
+        var gcFuncHandle = LuaNative.allocFuncPtr(gcCallback, CFunction);
+        callCallbackHandle = LuaNative.allocFuncPtr(callCallback, CFunction);
         #else
         var gcFuncHandle = gcCallback;
         callCallbackHandle = callCallback;
