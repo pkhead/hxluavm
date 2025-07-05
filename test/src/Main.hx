@@ -110,12 +110,25 @@ class Main {
             
             trace("SOURCE:\n\n" + str);
 
-            if (Lua.l_loadstring(L, str) != cast ThreadStatus.Ok) {
+            FuncHelper.push(L, (L) -> {
+                var err = Lua.tostring(L, 1);
+                Lua.l_traceback(L, L, err, 0);
+                trace(Lua.tostring(L, -1));
+
+                var ar = DebugPtr.alloc();
+                Lua.getstack(L, 2, ar);
+                Lua.getinfo(L, "nSl", ar);
+                trace(ar.short_src);
+                ar.free();
+                return 0;
+            });
+
+            if (Lua.l_loadbufferx(L, str, str.length, "code", "bt") != cast ThreadStatus.Ok) {
                 trace("parse error!");
                 trace(Lua.tostring(L, -1));
-            } else if (Lua.pcall(L, 0, 0, 0) != cast ThreadStatus.Ok) {
+            } else if (Lua.pcall(L, 0, 0, -2) != cast ThreadStatus.Ok) {
                 trace("runtime error!");
-                trace(Lua.tostring(L, -1));
+                // trace(Lua.tostring(L, -1));
             }
 
             Lua.close(L);

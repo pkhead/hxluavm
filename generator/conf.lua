@@ -28,6 +28,8 @@ conf.haxe_type_mappings = {
     ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "Callable<CFunction>", "FuncPtr<CFunction>"},
     ["lua_KFunction"] = {"_FUN(_I32,_LSTATE _I32 _BYTES)", "Callable<KFunction>", "FuncPtr<KFunction>"},
     ["lua_KContext"] = {"_BYTES", "NativePtr", "NativePtr"},
+    ["lua_Debug*"] = {"_BYTES", "DebugPtr", "DebugPtr"},
+    ["const lua_Debug*"] = {"_BYTES", "DebugPtr", "DebugPtr"}
     -- ["lua_Reader"] = {"_FUN(_BYTES,_LSTATE _BYTES _REF(_I64))", "Reader"}
 }
 
@@ -243,7 +245,7 @@ return luaL_error(L, msg);
 
 conf.exposed_structs = {
     lua_Debug = {
-        hx_name = "Debug",
+        hx_name = "DebugPtr",
         private_members = {"i_ci"}
     }
 }

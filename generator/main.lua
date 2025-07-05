@@ -61,14 +61,12 @@ do
 
 #define _LSTATE _ABSTRACT(lua_State)
 #define _NUINT _ABSTRACT(_BYTES)
-
 ]])
 
     output_wasmc_file:write([[#include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
 #include <emscripten.h>
-
 ]])
 
     output_hx_bindings_file:write([[package luavm;
@@ -113,7 +111,7 @@ abstract Callable<T:Function>(T) from T to T {
     local haxe_type_mappings = conf.haxe_type_mappings
 
     local haxe_trivial_types = {
-        "Void", "Int", "Single", "Float", "State", "CString", "CFunction", "KFunction"
+        "Void", "Int", "Single", "Float", "State", "CString", "CFunction", "KFunction", "DebugPtr"
     }
 
     local char_types = {"char", "unsigned char", "const char", "const unsigned char", "unsigned const char"}
@@ -456,117 +454,137 @@ abstract Callable<T:Function>(T) from T to T {
             local struct_conf = conf.exposed_structs[struct.name]
             local hx_name = struct_conf.hx_name
 
-            if target == "hl" then
-                tinsert(hx_bindings_source, ("abstract %s(hl.Bytes) from hl.Bytes to hl.Bytes {\n"):format(hx_name))
-                tinsert(hx_bindings_source, ("    public static function alloc():%s {\n"):format(hx_name))
-                tinsert(hx_bindings_source, ("        var data = haxe.io.Bytes.alloc(%i);\n"):format(struct.size))
-                tinsert(hx_bindings_source, ("        data.fill(0, %i, 0);\n"):format(struct.size))
-                tinsert(hx_bindings_source,  "        return hl.Bytes.fromBytes(data);\n")
-                tinsert(hx_bindings_source,  "    }\n\n")
-                tinsert(hx_bindings_source,  "    public function free() {}\n")
+            tinsert(hx_bindings_source, ("abstract %s(NativePtr) from NativePtr to NativePtr {\n"):format(hx_name))
+            tinsert(hx_bindings_source, ("    public static function alloc():%s {\n"):format(hx_name))
+            tinsert(hx_bindings_source, ("        var data = haxe.io.Bytes.alloc(%i);\n"):format(struct.size))
+            tinsert(hx_bindings_source, ("        data.fill(0, %i, 0);\n"):format(struct.size))
+            tinsert(hx_bindings_source,  "        return NativePtr.fromBytes(data);\n")
+            tinsert(hx_bindings_source,  "    }\n\n")
 
-                for _, member in ipairs(struct.members) do
-                    if not table.find(struct_conf.private_members, member.name) then
-                        if member.base_type == "char" and member.count > 1 then
-                            local template = [[
-                                public var $name(get, set):String;
-                                function get_$name():String {
-                                    var strlen = CString.strLen(this, $offset);
-                                    return this.offset($offset).toBytes(strlen).toString();
-                                }
-
-                                function set_$name(v:String) {
-                                    var bytes = haxe.io.Bytes.ofString(v);
-                                    var l = bytes.length;
-                                    if (l > $size-1) {
-                                        l = $size-1;
-                                    }
-                                    for (i in 0...l) {
-                                        this[$offset+i] = bytes.get(i);
-                                    }
-                                    this[l] = 0;
-                                    return v;
-                                }           
-                            ]]
-                            
-                            local s = template_sub(template, member, 1)
-                            tinsert(hx_bindings_source, s)
-                        elseif member.type == "const char*" then
-                            tinsert(hx_bindings_source, ("    public var %s(get,never):String;\n"):format(member.name))
-                            local template = [[
-                                function get_$name():String {
-                                    var strlen = CString.strLen(this, $offset);
-                                    return this.offset($offset).toBytes(strlen).toString();
-                                }                            
-                            ]]
-                            
-                            local s = template_sub(template, member, 1)
-                            tinsert(hx_bindings_source, s)
-                            -- local map = haxe_type_mappings[member.type]
-                            -- if map == nil then
-                            --     print(("%s: no haxe representation for %s"):format(struct.name, member.type))
-                            --     goto skip_this_mem
-                            -- end
-
-                            -- tinsert(hx_bindings_source, ("    public var %s(get, set):String;\n"):format(member.name))
-                        elseif member.base_type == "float" or member.base_type == "double" then
-                            print(("%s: float or double type not yet implemented"):format(member.name))
-                        elseif member.base_type == "char" then
-                            local template = [[
-                                public var $name(get, set):Int;
-                                function get_$name() return this[$offset];
-                                function set_$name(v:Int) return this[$offset] = v;
-                            ]]
-                            local s = template_sub(template, member, 1)
-                            tinsert(hx_bindings_source, s)
-                        elseif member.base_type == "short" then
-                            local template = [[
-                                public var $name(get, set):Int;
-                                function get_$name() return this.getUI16($offset);
-                                function set_$name(v:Int) {
-                                    this.setUI16($offset, v);
-                                    return v;
-                                }
-                            ]]
-                            local s = template_sub(template, member, 1)
-                            tinsert(hx_bindings_source, s)
-                        elseif member.base_type == "int" or (member.base_type == "size_t" and target == "js") then
-                            local template = [[
-                                public var $name(get, set):Int;
-                                function get_$name() return this.getI32($offset);
-                                function set_$name(v:Int) {
-                                    this.setI32($offset, v);
-                                    return v;
-                                }
-                            ]]
-                            local s = template_sub(template, member, 1)
-                            tinsert(hx_bindings_source, s)
-                        elseif member.base_type == "size_t" then
-                            local template = [[
-                                public var $name(get, set):haxe.Int64;
-                                function get_$name() {
-                                    var low = 0;
-                                    var high = 0;
-                                    LuaNative.luaX_sizet_get(this.offset($offset), new hl.Ref<Int>(low), new hl.Ref<Int>(high));
-                                    return haxe.Int64.make(high, low);
-                                }
-                                
-                                function set_$name(v:haxe.Int64) {
-                                    LuaNative.luaX_sizet_set(this.offset($offset), v.low, v.high);
-                                    return v;
-                                }
-                            ]]
-                            local s = template_sub(template, member, 1)
-                            tinsert(hx_bindings_source, s)
-                        else
-                            print(("%s: unsupported/unimplemented member type %s"):format(struct.name, member.type))
-                        end
-                    end
-
-                    ::skip_this_mem::
-                end
-                tinsert(hx_bindings_source,  "}\n")
+            if target == "js" then
+                tinsert(hx_bindings_source,  "    public inline function free() {\n        LuaNative.wasm._free(this); this = 0;\n    }\n")
+            else
+                tinsert(hx_bindings_source,  "    public inline function free() {}\n")
             end
+
+            for _, member in ipairs(struct.members) do
+                if not table.find(struct_conf.private_members, member.name) then
+                    if member.base_type == "char" and member.count > 1 then
+                        local template = [[
+                            public var $name(get, set):String;
+                            function get_$name():String {
+                                var strlen = CString.strLen(this, $offset);
+                                return this.offset($offset).toBytes(strlen).toString();
+                            }
+
+                            function set_$name(v:String) {
+                                var bytes = haxe.io.Bytes.ofString(v);
+                                var l = bytes.length;
+                                if (l > $size-1) {
+                                    l = $size-1;
+                                }
+                                for (i in 0...l) {
+                                    this[$offset+i] = bytes.get(i);
+                                }
+                                this[l] = 0;
+                                return v;
+                            }           
+                        ]]
+                        
+                        local s = template_sub(template, member, 1)
+                        tinsert(hx_bindings_source, s)
+                    elseif member.type == "const char*" then
+                        tinsert(hx_bindings_source, ("    public var %s(get,never):String;\n"):format(member.name))
+
+                        local template
+                        if target == "js" then
+                            template = [[
+                                function get_$name():String {
+                                    var cstr = NativePtr.fromAddress(LuaNative.wasm.HEAPU32[(this.address() + $offset)>>2]);
+                                    var strlen = CString.strLen(cstr, 0);
+                                    return cstr.toBytes(strlen).toString();
+                                }
+                            ]]
+                        else
+                            template = [[
+                                function get_$name():String {
+                                    var addrLow = 0;
+                                    var addrHigh = 0;
+                                    LuaNative.luaX_sizet_get(this.offset($offset), new hl.Ref<Int>(addrLow), new hl.Ref<Int>(addrHigh));
+
+                                    var cstr = NativePtr.fromAddress(NativeUInt.make(addrHigh, addrLow));
+                                    var strlen = CString.strLen(cstr, 0);
+                                    return cstr.toBytes(strlen).toString();
+                                }
+                            ]]
+                        end
+                        
+                        local s = template_sub(template, member, 1)
+                        tinsert(hx_bindings_source, s)
+                        -- local map = haxe_type_mappings[member.type]
+                        -- if map == nil then
+                        --     print(("%s: no haxe representation for %s"):format(struct.name, member.type))
+                        --     goto skip_this_mem
+                        -- end
+
+                        -- tinsert(hx_bindings_source, ("    public var %s(get, set):String;\n"):format(member.name))
+                    elseif member.base_type == "float" or member.base_type == "double" then
+                        print(("%s: float or double type not yet implemented"):format(member.name))
+                    elseif member.base_type == "char" then
+                        local template = [[
+                            public var $name(get, set):Int;
+                            function get_$name() return this[$offset];
+                            function set_$name(v:Int) return this[$offset] = v;
+                        ]]
+                        local s = template_sub(template, member, 1)
+                        tinsert(hx_bindings_source, s)
+                    elseif member.base_type == "short" then
+                        local template = [[
+                            public var $name(get, set):Int;
+                            function get_$name() return this.getUI16($offset);
+                            function set_$name(v:Int) {
+                                this.setUI16($offset, v);
+                                return v;
+                            }
+                        ]]
+                        local s = template_sub(template, member, 1)
+                        tinsert(hx_bindings_source, s)
+                    elseif member.base_type == "int" or (member.base_type == "size_t" and target == "js") then
+                        local template = [[
+                            public var $name(get, set):Int;
+                            function get_$name() return this.getI32($offset);
+                            function set_$name(v:Int) {
+                                this.setI32($offset, v);
+                                return v;
+                            }
+                        ]]
+                        local s = template_sub(template, member, 1)
+                        tinsert(hx_bindings_source, s)
+                    elseif member.base_type == "size_t" then
+                        local template = [[
+                            public var $name(get, set):haxe.Int64;
+                            function get_$name() {
+                                var low = 0;
+                                var high = 0;
+                                LuaNative.luaX_sizet_get(this.offset($offset), new hl.Ref<Int>(low), new hl.Ref<Int>(high));
+                                return haxe.Int64.make(high, low);
+                            }
+                            
+                            function set_$name(v:haxe.Int64) {
+                                LuaNative.luaX_sizet_set(this.offset($offset), v.low, v.high);
+                                return v;
+                            }
+                        ]]
+                        local s = template_sub(template, member, 1)
+                        tinsert(hx_bindings_source, s)
+                    else
+                        print(("%s: unsupported/unimplemented member type %s"):format(struct.name, member.type))
+                    end
+                end
+
+                ::skip_this_mem::
+            end
+            tinsert(hx_bindings_source,  "}\n")
         end
     end
 

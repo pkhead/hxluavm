@@ -1,7 +1,7 @@
 -- local inst = TestClass.new(3, "hi")
 -- print(inst.b)
 local function print_array_field(inst)
-    for i=1, inst.array_field.length do
+    for i=1, inst.array_fields.length do
         print(i, inst.array_field:get(i))
     end
 end

@@ -30,6 +30,18 @@ abstract NativePtr(NativeUInt) from NativeUInt to NativeUInt {
         return out;
     }
 
+    public static function fromBytes(bytes:haxe.io.Bytes):NativePtr {
+        var alloc = LuaNative.wasm._malloc(bytes.length);
+        for (i in 0...bytes.length) {
+            LuaNative.wasm.HEAPU8[alloc+i] = bytes.get(i);
+        }
+        return alloc;
+    }
+
+    public static inline function fromAddress(addr:NativeUInt):NativePtr {
+        return addr;
+    }
+
     @:arrayAccess
     public inline function getUI8(pos:Int):Int {
         return LuaNative.wasm.HEAPU8[toInt32() + pos];
@@ -63,7 +75,7 @@ abstract NativePtr(NativeUInt) from NativeUInt to NativeUInt {
 
     @:arrayAccess
     public inline function setUI8(pos:Int, value:Int) {
-        LuaNative.wasm.HEAPU8[toInt32() + pos] = value;
+        return LuaNative.wasm.HEAPU8[toInt32() + pos] = value;
     }
 
     public function setUI16(pos:Int, value:Int) {
