@@ -1,4 +1,5 @@
 // import luavm.Lua;
+import luavm.HookMask;
 import testpkg.TestClass;
 import luavm.LuaNative;
 import luavm.Lua;
@@ -120,15 +121,24 @@ class Main {
                 Lua.getinfo(L, "nSl", ar);
                 trace(ar.short_src);
                 ar.free();
+
                 return 0;
             });
 
-            if (Lua.l_loadbufferx(L, str, str.length, "code", "bt") != cast ThreadStatus.Ok) {
+            var f = (L, ar:DebugPtr) -> {
+                trace("hook activated", ar.event);
+            };
+
+            Lua.sethook(L, f, HookMask.MaskLine, 0);
+
+            if (Lua.l_loadstring(L, str) != cast ThreadStatus.Ok) {
                 trace("parse error!");
                 trace(Lua.tostring(L, -1));
-            } else if (Lua.pcall(L, 0, 0, -2) != cast ThreadStatus.Ok) {
-                trace("runtime error!");
-                // trace(Lua.tostring(L, -1));
+            } else {
+                if (Lua.pcall(L, 0, 0, -2) != cast ThreadStatus.Ok) {
+                    trace("runtime error!");
+                    // trace(Lua.tostring(L, -1));
+                }
             }
 
             Lua.close(L);

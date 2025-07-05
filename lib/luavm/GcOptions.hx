@@ -1,6 +1,6 @@
 package luavm;
 
-enum abstract GcOptions(Int) {
+enum abstract GcOptions(Int) from Int to Int {
 	var GcStop = 0;
 	var GCRestart = 1;
 	var GcCollect = 2;
@@ -10,4 +10,8 @@ enum abstract GcOptions(Int) {
 	var GcSetPause = 6;
 	var GcSetStepMul = 7;
 	var GcIsRunning = 9;
+
+	@:to inline function toInt():Int {
+        return this;
+    }
 }

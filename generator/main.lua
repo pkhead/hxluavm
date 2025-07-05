@@ -79,6 +79,7 @@ import luavm.CString;
 
 typedef CFunction = State->Int;
 typedef KFunction = (State,Int,NativePtr)->Int;
+typedef Hook = (State,DebugPtr)->Void;
 
 enum FunctionType {
     CFunction;
@@ -103,7 +104,7 @@ abstract Callable<T:Function>(T) from T to T {
 #end
 ]])
 
-    local func_types = {"lua_CFunction"}
+    local func_types = {"lua_CFunction", "lua_KFunction", "lua_Hook"}
 
     -- 1: hl.h type
     -- 2: haxe hl type
@@ -111,7 +112,12 @@ abstract Callable<T:Function>(T) from T to T {
     local haxe_type_mappings = conf.haxe_type_mappings
 
     local haxe_trivial_types = {
-        "Void", "Int", "Single", "Float", "State", "CString", "CFunction", "KFunction", "DebugPtr"
+        "Void", "Int", "Single", "Float", "State", "CString",
+        
+        "Callable<CFunction>", "Callable<KFunction>", "Callable<Hook>",
+        "FuncPtr<CFunction>", "FuncPtr<KFunction>", "FuncPtr<Hook>",
+        
+        "DebugPtr"
     }
 
     local char_types = {"char", "unsigned char", "const char", "const unsigned char", "unsigned const char"}
@@ -217,7 +223,7 @@ abstract Callable<T:Function>(T) from T to T {
 
                 -- use actual arg type here, so that it can cast it to size_t
                 if target == "hl" and table.find(func_types, arg.type) then
-                    table.insert(arg_names, arg.name .. "->fun")
+                    table.insert(arg_names, ("(%s == NULL ? NULL : %s->fun)"):format(arg.name, arg.name))
                     table.insert(param_strs, ("vclosure* %s"):format(arg.name))
                 elseif target == "hl" and arg.type == "size_t" then
                     table.insert(arg_names, "(size_t)" .. arg.name)

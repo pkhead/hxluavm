@@ -1,6 +1,6 @@
 package luavm;
 
-enum abstract LuaType(Int) {
+enum abstract LuaType(Int) from Int to Int {
 	var TNone = -1;
 	var TNil = 0;
 	var TBoolean = 1;
@@ -11,4 +11,8 @@ enum abstract LuaType(Int) {
 	var TFunction = 6;
 	var TUserdata = 7;
 	var TThread = 8;
+
+	@:to inline function toInt():Int {
+        return this;
+    }
 }
