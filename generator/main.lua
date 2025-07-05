@@ -84,6 +84,7 @@ typedef Hook = (State,DebugPtr)->Void;
 enum FunctionType {
     CFunction;
     KFunction;
+    Hook;
 }
 
 #if js
@@ -622,6 +623,7 @@ abstract Callable<T:Function>(T) from T to T {
         return cast wasm.addFunction(func, switch (funcType) {
             case CFunction: "ip";
             case KFunction: "ipip";
+            case Hook: "vpp";
         });
     }
 ]]
