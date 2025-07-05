@@ -128,6 +128,8 @@ abstract NativeUInt(hl.Bytes) {
         return this.address();
     }
 
+    public inline function getBytes(count:Int) return this.toBytes(count);
+
     @:arrayAccess
     public inline function getUI8(pos:Int) return this.getUI8(pos);
     public inline function getUI16(pos:Int) return this.getUI16(pos);

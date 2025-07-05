@@ -292,11 +292,25 @@ $<HL>
     }
 
     public static inline function l_getmetatable(L:State, tname:String) {
-        LuaNative.lua_getfield(L, REGISTRYINDEX, tname);
+        return LuaNative.lua_getfield(L, REGISTRYINDEX, tname);
     }
 
     public static inline function l_checkudata(L:State, ud:Int, tname:String):NativeUInt {
         return LuaNative.luaL_checkudata(L, ud, tname);
+    }
+    
+    public static function l_checkstring(L:State, idx:Int):String {
+        #if js
+        var tmpAlloc:NativeUInt = LuaNative.wasm._malloc(4);
+        var ptr = LuaNative.luaL_checklstring(L, idx, tmpAlloc);
+        var str = ptr.getBytes(tmpAlloc.getI32(0)).toString();
+        LuaNative.wasm._free(tmpAlloc);
+        return str;
+        #else
+        var len = 0;
+        var ptr = LuaNative.luaL_checklstring(L, idx, new hl.Ref<Int>(len));
+        return ptr.hlBytes.toBytes(len).toString();
+        #end
     }
 
     public static inline function upvalueindex(i:Int) {
