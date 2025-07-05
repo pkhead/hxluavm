@@ -1,26 +1,12 @@
+package luavm.util;
+
 import haxe.macro.ComplexTypeTools;
 import haxe.macro.TypeTools;
 import haxe.macro.Context;
 import haxe.macro.Expr;
 import haxe.macro.Type;
 
-class Macros {
-    public static macro function getLuaSource():ExprOf<String> {
-        var path = "code.lua";
-        Context.registerModuleDependency("Macros", path);
-        var str:String = sys.io.File.getContent(path);
-        return macro $v{str};
-    }
-
-    // public static macro function buildClassWrap():Array<Field> {
-    //     var cl = Context.getLocalClass().get();
-    //     var fields:Array<Field> = [];
-
-    //     trace(cl.name);
-
-    //     return fields;
-    // }
-
+class ClassWrapperMacros {
     #if macro
     static var typeWrappers:Map<String, TypeDefinition> = [];
 
@@ -39,17 +25,17 @@ class Macros {
                             case "Int": macro luavm.Lua.pushinteger(L, $e{fieldExpr});
                             case "Float": macro luavm.Lua.pushnumber(L, $e{fieldExpr});
                             case "Single": macro luavm.Lua.pushnumber(L, $e{fieldExpr});
-                            default: Context.fatalError('LuaClassWrapper does not support $atr type for a class field.', Context.currentPos());
+                            default: Context.fatalError('ClassWrapper does not support $atr type for a class field.', Context.currentPos());
                         }
                     
                     case TInst(tr, params):
                         switch (tr.toString()) {
                             case "String": macro luavm.Lua.pushstring(L, $e{fieldExpr});
-                            default: macro LuaClassWrapper.push(L, $e{fieldExpr});
+                            default: macro luavm.util.ClassWrapper.push(L, $e{fieldExpr});
                             // default: Context.fatalError('LuaClassWrapper does not support $tr type for a class field.', Context.currentPos());
                         }
 
-                    default: Context.fatalError('LuaClassWrapper does not support ${field.type} type for a class field.', Context.currentPos());
+                    default: Context.fatalError('ClassWrapper does not support ${field.type} type for a class field.', Context.currentPos());
                 };
 
                 cases.push({

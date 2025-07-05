@@ -1,9 +1,11 @@
 // import luavm.Lua;
+import testpkg.TestClass;
 import luavm.LuaNative;
 import luavm.Lua;
 import luavm.State;
 import luavm.ThreadStatus;
 import luavm.FuncHelper;
+import luavm.util.ClassWrapper;
 
 class Main {
     // static function addFunc(L:State) {
@@ -94,6 +96,9 @@ class Main {
             });
             Lua.setglobal(L, "warn");
             #end
+
+            var b = new TestClass(4, "hi");
+            ClassWrapper.push(L, b);
 
             #if sys
             var str = sys.io.File.getContent("code.lua");
