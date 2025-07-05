@@ -69,42 +69,6 @@ do
 #include <emscripten.h>
 ]])
 
-    output_hx_bindings_file:write([[package luavm;
-import haxe.Constraints.Function;
-import luavm.GcOptions;
-import luavm.LuaType;
-import luavm.State;
-import luavm.ThreadStatus;
-import luavm.CString;
-
-typedef CFunction = State->Int;
-typedef KFunction = (State,Int,NativePtr)->Int;
-typedef Hook = (State,DebugPtr)->Void;
-
-enum FunctionType {
-    CFunction;
-    KFunction;
-    Hook;
-}
-
-#if js
-// typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
-abstract FuncPtr<T:Function>(Int) from Int to Int {}
-
-#else
-@:callable
-abstract Callable<T:Function>(T) from T to T {
-	@:from static function ofFunc<T:Function>(f:T) {
-		return cast hl.Api.noClosure(f);
-	}
-}
-
-// typedef CFunction = Callable<State->Int>;
-// typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
-// typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
-#end
-]])
-
     local func_types = {"lua_CFunction", "lua_KFunction", "lua_Hook"}
 
     -- 1: hl.h type
@@ -120,8 +84,6 @@ abstract Callable<T:Function>(T) from T to T {
         
         "DebugPtr"
     }
-
-    local char_types = {"char", "unsigned char", "const char", "const unsigned char", "unsigned const char"}
 
     local hx_js_bindings_source = {}
     local hx_hl_bindings_source = {}
@@ -636,12 +598,14 @@ abstract Callable<T:Function>(T) from T to T {
     proc_func_defs(funcs, "hl")
     proc_func_defs(funcs, "js")
 
+    tinsert(hx_hl_bindings_source, "}\n")
+    tinsert(hx_js_bindings_source, "}\n")
 
-    output_hx_bindings_file:write("\n#if js\n")
-    output_hx_bindings_file:write(table.concat(hx_js_bindings_source))
-    output_hx_bindings_file:write("}\n#else\n")
-    output_hx_bindings_file:write(table.concat(hx_hl_bindings_source))
-    output_hx_bindings_file:write("}\n#end\n")
+    local hx_bindings_content = conf.hx_lua_bindings
+        :gsub("$<JS>", table.concat(hx_js_bindings_source))
+        :gsub("$<HL>", table.concat(hx_hl_bindings_source))
+    
+    output_hx_bindings_file:write(hx_bindings_content)
 
     -- if conf.raw_haxe then
     --     output_hx_bindings_file:write(conf.raw_haxe)

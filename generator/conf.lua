@@ -252,6 +252,48 @@ conf.exposed_structs = {
     }
 }
 
+conf.hx_lua_bindings = [[package luavm;
+import haxe.Constraints.Function;
+import luavm.GcOptions;
+import luavm.LuaType;
+import luavm.State;
+import luavm.ThreadStatus;
+import luavm.CString;
+
+typedef CFunction = State->Int;
+typedef KFunction = (State,Int,NativePtr)->Int;
+typedef Hook = (State,DebugPtr)->Void;
+
+enum FunctionType {
+    CFunction;
+    KFunction;
+    Hook;
+}
+
+#if js
+// typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
+abstract FuncPtr<T:Function>(Int) from Int to Int {}
+
+#else
+@:callable
+abstract Callable<T:Function>(T) from T to T {
+	@:from static function ofFunc<T:Function>(f:T) {
+		return cast hl.Api.noClosure(f);
+	}
+}
+
+// typedef CFunction = Callable<State->Int>;
+// typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
+// typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
+#end
+
+#if js
+$<JS>
+#else
+$<HL>
+#end
+]]
+
 conf.hx_lua_wrapper = [[package luavm;
 import luavm.GcOptions;
 import luavm.LuaType;
