@@ -69,7 +69,7 @@ local function tokenize_c_line(stream, pos)
     end
     
     while not stream:eof() do
-        if stream:readchar() == preproc_symbol then
+        while stream:readchar() == preproc_symbol do
             flush()
             stream:skip(2)
 
