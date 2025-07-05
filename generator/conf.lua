@@ -25,7 +25,7 @@ conf.haxe_type_mappings = {
 }
 
 conf.c_header_extra = [[
-LUA_API int luaX_getregistryindex(void);
+extern int luaX_getregistryindex(void);
 ]]
 
 conf.overrides = {
@@ -162,6 +162,13 @@ return luaL_error(L, msg);
         [[
     return lua_newuserdatauv(L, (size_t)sz, nuvalue);
 ]]
+    }
+}
+
+conf.exposed_structs = {
+    lua_Debug = {
+        hx_name = "Debug",
+        private_fields = {"i_ci"}
     }
 }
 

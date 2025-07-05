@@ -1,4 +1,4 @@
-local native_lib_name, lua_src_path = ...
+local native_lib_name, lua_src_path, CC = ...
 
 if not native_lib_name then
     error("native lib name (first argument) must be specified!")
@@ -8,10 +8,16 @@ if not lua_src_path then
     error("lua include path (second argument) must be specified!")
 end
 
+if not CC then
+    error("path to gcc/clang (third argument) must be specified!")
+end
+
 local luah_path = lua_src_path .. "/lua.h"
 local lualibh_path = lua_src_path .. "/lualib.h"
 local lauxlibh_path = lua_src_path .. "/lauxlib.h"
+
 local conf = require("generator.conf")
+local StringStream = require("generator.sstream")
 
 local function tfind(t, q)
     for i, v in pairs(t) do
@@ -36,14 +42,6 @@ local tinsert = table.insert
 --     end
 --     return table.concat(out)
 -- end
-
----@class Stream
----@field popchar fun(self:Stream):integer Pops one character, returning its code.
----@field read fun(self:Stream, count:integer):string Read contents without moving the cursor.
----@field pop fun(self:Stream, count:integer):string Read contents and advance the cursor.
----@field eof fun(self:Stream):boolean
----@field skip fun(self:Stream, count:integer) Advance the cursor without reading contents.
-
 local parse_file
 do
     -- local c_symbols = {"(", ")", ";", "*", ","}
@@ -59,6 +57,8 @@ do
     end)
 
     local whitespace = {string.byte(" \t\n", 1, -1)}
+    local preproc_symbol = string.byte("#")
+    local quote_symbol = string.byte("\"")
 
     ---@param stream Stream
     local function identify_symbol(stream)
@@ -71,27 +71,76 @@ do
         return nil
     end
 
-    local function flush(tokens, tmpbuf)
-        if tmpbuf[1] then
-            table.insert(tokens, {
-                type = "word",
-                str = string.char(table.unpack(tmpbuf))
-            })
-
-            for i=1, #tmpbuf do
-                tmpbuf[i] = nil
-            end
+    local function make_token(type, str, pos)
+        local line = -1
+        local file = "?"
+        if pos then
+            line = pos.line
+            file = pos.file
         end
+
+        return {
+            type = type,
+            str = str,
+            line = line,
+            file = file
+        }
     end
 
     ---@param stream Stream
-    local function tokenize_c_line(stream)
+    ---@param pos {line:integer, file:string}
+    local function tokenize_c_line(stream, pos)
         local tokens = {}
         local tmpbuf = {}
+        local depth = 0
+
+        local function flush()
+            if tmpbuf[1] then
+                table.insert(tokens, make_token(
+                    "word",
+                    string.char(table.unpack(tmpbuf)),
+                    pos
+                ))
+
+                for i=1, #tmpbuf do
+                    tmpbuf[i] = nil
+                end
+            end
+        end
         
         while not stream:eof() do
-            if stream:read(1) == ";" then
-                table.insert(tokens, { type = "symbol", str = ";" })
+            if stream:readchar() == preproc_symbol then
+                flush()
+                stream:skip(2)
+
+                local preproc_data = {}
+                local is_in_str = false
+
+                while true do
+                    local c = stream:popchar()
+                    if not is_in_str and (c == 10 or c == 32) then
+                        tinsert(preproc_data, table.concat(tmpbuf))
+                        tmpbuf = {}
+
+                        if c == 10 then
+                            break
+                        end
+                    else
+                        if c == quote_symbol then
+                            is_in_str = not is_in_str
+                        end
+
+                        tinsert(tmpbuf, string.char(c))
+                    end
+                end
+
+                pos.line = tonumber(preproc_data[1]) --[[@as integer]]
+                pos.file = string.sub(preproc_data[2], 2, -2)
+            end
+
+            if depth == 0 and stream:read(1) == ";" then
+                flush()
+                table.insert(tokens, make_token("symbol", ";", pos))
                 stream:skip(1)
                 break
             end
@@ -99,7 +148,7 @@ do
             local sym = identify_symbol(stream)
 
             if sym then
-                flush(tokens, tmpbuf)
+                flush()
 
                 if sym == "//" then
                     stream:skip(2)
@@ -123,21 +172,31 @@ do
                         end
                     end
                 else
-                    table.insert(tokens, { type = "symbol", str = sym })
+                    table.insert(tokens, make_token("symbol", sym, pos))
                     stream:skip(string.len(sym))
+
+                    if sym == "{" then
+                        depth=depth+1
+                    elseif sym == "}" then
+                        depth=depth-1
+                    end
                 end
             else
                 local char = stream:popchar()
 
                 if tfind(whitespace, char) then
-                    flush(tokens, tmpbuf)
+                    flush()
+
+                    if char == 10 then
+                        pos.line=pos.line+1
+                    end
                 else
                     table.insert(tmpbuf, char)
                 end
             end
         end
         ::loop_end::
-        flush(tokens, tmpbuf)
+        flush()
         
         return tokens
     end
@@ -146,49 +205,56 @@ do
         return tok.type == type and tok.str == v
     end
 
+    local function tok_error(tok, msg)
+        error(("%s:%i: %s"):format(tok.file, tok.line, msg), 2)
+    end
+
+    local function assert_type(tok, type, msg)
+        if tok.type ~= type then
+            error(("%s:%i: %s"):format(tok.file, tok.line, msg or ("expected " .. type)), 2)
+        end
+    end
+    
+    local function assert_token_check(tok, type, str, msg)
+        if not token_check(tok, type, str) then
+            error(("%s:%i: %s"):format(tok.file, tok.line, msg or ("expected %s \"%s\""):format(type, str)), 2)
+        end
+    end
+
     local export_defines = {"LUA_API", "LUALIB_API", "LUAMOD_API"}
 
-    ---@param stream Stream
-    local function parse_c_funcdef(stream)
-        local tokens = tokenize_c_line(stream)
-        -- print("==BEGIN TOKENS==")
-        -- for i, v in pairs(tokens) do
-        --     print(i, ("%s \"%s\""):format(v.type, v.str))
-        -- end
-        -- print("==END TOKENS==")
+    local function parse_type_name(tokens, index)
+        assert_type(tokens[index], "word")
+        local tmp = {tokens[index].str}
+        index=index+1
 
-        if tokens[1] == nil or not (tokens[1].type == "word" and tfind(export_defines, tokens[1].str)) then
-            return nil
+        while true do
+            local possible_modifer = tmp[#tmp]
+            if possible_modifer == "const" or possible_modifer == "unsigned" or possible_modifer == "struct" then
+                table.insert(tmp, " ")
+                table.insert(tmp, tokens[index].str)
+            elseif token_check(tokens[index], "symbol", "*") or token_check(tokens[index], "symbol", "[") or token_check(tokens[index], "symbol", "]") then
+                table.insert(tmp, "*")
+            else
+                -- index=index+1
+                break
+            end
+
+            index=index+1
         end
 
+        return table.concat(tmp), index
+    end
 
+    local function parse_c_funcdef(tokens)
+        if tokens[1] == nil or not token_check(tokens[1], "word", "extern") then
+            return nil
+        end
+        
         local output = {}
         local index = 2
 
-        local function parse_type_name()
-            assert(tokens[index].type == "word")
-            local tmp = {tokens[index].str}
-            index=index+1
-
-            while true do
-                local possible_modifer = tmp[#tmp]
-                if possible_modifer == "const" or possible_modifer == "unsigned" then
-                    table.insert(tmp, " ")
-                    table.insert(tmp, tokens[index].str)
-                elseif token_check(tokens[index], "symbol", "*") or token_check(tokens[index], "symbol", "[") or token_check(tokens[index], "symbol", "]") then
-                    table.insert(tmp, "*")
-                else
-                    -- index=index+1
-                    break
-                end
-
-                index=index+1
-            end
-
-            return table.concat(tmp)
-        end
-
-        output.ret = parse_type_name()
+        output.ret, index = parse_type_name(tokens, index)
         -- print(output.ret)
 
         local func_name_in_paren = token_check(tokens[index], "symbol", "(")
@@ -196,17 +262,23 @@ do
             index=index+1
         end
 
-        assert(tokens[index].type == "word")
+        assert_type(tokens[index], "word")
         output.name = tokens[index].str
-        --print("processing " .. output.name)
         index=index+1
 
         if func_name_in_paren then
-            assert(token_check(tokens[index], "symbol", ")"))
+            assert_token_check(tokens[index], "symbol", ")")
             index=index+1
         end
 
-        assert(token_check(tokens[index], "symbol", "("))
+        if string.sub(output.name, 1, 3) ~= "lua" then
+            return nil
+        end
+
+        if not token_check(tokens[index], "symbol", "(") then
+            return nil
+        end
+
         index=index+1
         output.args = {}
 
@@ -214,7 +286,9 @@ do
             index=index+2
         else
             while not token_check(tokens[index], "symbol", ")") do
-                local arg_type = parse_type_name()
+                local arg_type
+                arg_type, index = parse_type_name(tokens, index)
+
                 if arg_type == "..." then
                     table.insert(output.args, { type = "...", name = "" })
                 else
@@ -236,7 +310,7 @@ do
             index=index+1
         end
 
-        assert(token_check(tokens[index], "symbol", ";"))
+        assert_token_check(tokens[index], "symbol", ";")
 
         local override = conf.overrides[output.name]
         if override then
@@ -259,16 +333,94 @@ do
         -- end
     end
 
-    function parse_file(stream)
+    local function parse_c_structdef(tokens)
+        if tokens[1] == nil then
+            return nil
+        end
+        
+        if not token_check(tokens[1], "word", "struct") then
+            return nil
+        end
+        
+        assert_type(tokens[2], "word", "expected struct name")
+        local struct_name = tokens[2].str
+
+        if not conf.exposed_structs[struct_name] then
+            return nil
+        end
+        
+        assert_token_check(tokens[3], "symbol", "{", "expected open paren after struct name")
+
+        local struct_data = {
+            name = struct_name,
+            members = {}
+        }
+
+        local tok_idx = 4
+        while not token_check(tokens[tok_idx], "symbol", "}") do
+            local mem_type
+            mem_type, tok_idx = parse_type_name(tokens, tok_idx)
+            
+            assert_type(tokens[tok_idx], "word", "expected identifier after type")
+            local mem_name = tokens[tok_idx].str
+            tok_idx=tok_idx+1
+
+            local arr_size = 1
+            if token_check(tokens[tok_idx], "symbol", "[") then
+                tok_idx=tok_idx+1
+
+                assert_type(tokens[tok_idx], "word", "expected integer")
+                arr_size = tonumber(tokens[tok_idx].str)
+                if arr_size == nil then
+                    tok_error(tokens[tok_idx], "could not parse array size")
+                end
+                tok_idx=tok_idx+1
+
+                assert_token_check(tokens[tok_idx], "symbol", "]")
+                tok_idx=tok_idx+1
+            end
+
+            local mem_name_display = mem_name
+            if arr_size > 1 then
+                mem_name_display = ("%s[%i]"):format(mem_name_display, arr_size)
+            end
+            print("FOUND", mem_type, mem_name_display)
+
+            assert_token_check(tokens[tok_idx], "symbol", ";", "expected semicolon")
+            tok_idx=tok_idx+1
+
+            tinsert(struct_data.members, {
+                type = mem_type,
+                name = mem_name,
+                count = arr_size
+            })
+        end
+
+        tok_idx=tok_idx+1
+
+        return struct_data
+    end
+
+    function parse_file(funcs, structs, stream)
         -- local test_file <close> = assert(io.open("test.c", "w"))
-        local funcs = {}
+        local pos = {
+            line = -1,
+            file = "?"
+        }
+
         while not stream:eof() do
-            local v = parse_c_funcdef(stream)
-            if v then
-                table.insert(funcs, v)
+            local tokens = tokenize_c_line(stream, pos)
+            
+            local func = parse_c_funcdef(tokens)
+            if func then
+                table.insert(funcs, func)
+            else
+                local struct = parse_c_structdef(tokens)
+                if struct and structs[struct.name] == nil then
+                    table.insert(structs, struct)
+                end
             end
         end
-        return funcs
     end
 end
 
@@ -284,76 +436,62 @@ end
 --     print("=END ARGS=")
 -- end
 
----@class StringStream: Stream
----@field _str string
----@field _idx integer
-local StringStream = {}
-StringStream.__index = StringStream
-
-function StringStream.new(str)
-    local self = setmetatable({}, StringStream)
-    self._str = str
-    self._idx = 1
-
-    return self
-end
-
-function StringStream:eof()
-    return self._idx > string.len(self._str)
-end
-
-function StringStream:popchar()
-    assert(not self:eof(), "eof!")
-    local ch = string.byte(self._str, self._idx)
-    self._idx = self._idx + 1
-    return ch
-end
-
----@param count integer
-function StringStream:pop(count)
-    assert(not self:eof(), "eof!")
-    local ret = string.sub(self._str, self._idx, self._idx + count - 1)
-    self._idx = self._idx + string.len(ret)
-    return ret
-end
-
----@param count integer
-function StringStream:read(count)
-    assert(not self:eof(), "eof!")
-    return string.sub(self._str, self._idx, self._idx + count - 1)
-end
-
-function StringStream:skip(count)
-    assert(not self:eof(), "eof!")
-    self._idx = self._idx + count
-end
-
 do
-    local function read_header(path)
-        local line_list = {}
-        local f <close> = io.open(path, "r")
-        if not f then
-            error("could not open " .. path)
-        end
-    
-        local continuation = false
-        for l in f:lines() do
-            local start_idx = string.find(l, "%S")
-            if start_idx then
-                if continuation or string.sub(l, start_idx, start_idx) == "#" then
-                    continuation = string.sub(l, -1) == "\\"
-                else
-                    table.insert(line_list, l)
-                end
-            end
-        end
+    local function read_headers(paths)
+        local tmpout = os.tmpname()
 
-        return table.concat(line_list, "\n")
-    end
+        -- invoke C preprocessor
+        local cmd = ("\"%s\" -E - > \"%s\""):format(CC, tmpout)
+        local cpp = assert(io.popen(cmd, "w"), ("could not run \"%s\""):format(cmd))
+        for _, p in ipairs(paths) do
+            cpp:write("#include \"")
+            cpp:write(p)
+            cpp:write("\"\n")
+        end
+        cpp:flush()
+        cpp:close()
+
+        local f <close> = assert(io.open(tmpout, "r"), "could not open " .. tmpout)
+        local out = f:read("a")
+        os.remove(tmpout)
+        -- for _, v in ipairs(defines or {}) do
+        --     cmd = cmd .. " -D " .. v
+        -- end
+        
+        
+        return out
+        
+        -- local line_list = {}
+        -- local f <close> = io.open(path, "r")
+        -- if not f then
+        --     error("could not open " .. path)
+        -- end
     
-    local funcs1 = parse_file(StringStream.new(read_header(luah_path)))
-    local funcs2 = parse_file(StringStream.new(read_header(lauxlibh_path)))
-    local funcs3 = parse_file(StringStream.new(read_header(lualibh_path) .. "\n" .. (conf.c_header_extra or "")))
+        -- local continuation = false
+        -- for l in f:lines() do
+        --     local start_idx = string.find(l, "%S")
+        --     if start_idx then
+        --         if continuation or string.sub(l, start_idx, start_idx) == "#" then
+        --             continuation = string.sub(l, -1) == "\\"
+        --         else
+        --             table.insert(line_list, l)
+        --         end
+        --     end
+        -- end
+
+        -- return table.concat(line_list, "\n")
+    end
+
+    local funcs = {}
+    local structs = {}
+    
+    -- print("processing " .. luah_path)
+    parse_file(funcs, structs, StringStream.new(read_headers({luah_path, lauxlibh_path, lualibh_path})))
+
+    if conf.c_header_extra then
+        print("processing c_header_extra")
+        parse_file(funcs, structs, StringStream.new(conf.c_header_extra))
+    end
 
     local output_hlc_file <close> = assert(io.open("hlexport.c", "w"), "could not open hlexport.c")
     local output_wasmc_file <close> = assert(io.open("wasmexport.c", "w"), "could not open wasmexport.c")
@@ -711,10 +849,8 @@ typedef KFunction = Callable<(State,Int,NativeUInt)->Int>;
         return hx_bindings_source, hx_wrapper_content
     end
 
-    for _, v in ipairs({funcs1, funcs2, funcs3}) do
-        proc_func_defs(v, "hl")
-        proc_func_defs(v, "js")
-    end
+    proc_func_defs(funcs, "hl")
+    proc_func_defs(funcs, "js")
 
     output_hx_bindings_file:write("\n#if js\n")
     output_hx_bindings_file:write(table.concat(hx_js_bindings_source))

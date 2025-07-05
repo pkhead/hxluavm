@@ -12,7 +12,7 @@ WASM_OUTPUT_DIR?=test/out/js
 all: hl wasm
 
 hlexport.c wasmexport.c: generator/main.lua generator/conf.lua
-	$(LUA) generator/main.lua $(LIB_NAME) $(LUA_INCLUDE)
+	$(LUA) generator/main.lua $(LIB_NAME) $(LUA_INCLUDE) $(CC)
 
 $(LIB_NAME).hdll: hlexport.c $(LUA_SOURCES)
 	$(CC) -shared -o $@ -I$(LUA_INCLUDE) $< $(LUA_SOURCES) -lhl $(CFLAGS)
@@ -25,6 +25,7 @@ install: $(LIB_NAME).hdll
 
 hl: $(LIB_NAME).hdll
 wasm: $(WASM_OUTPUT_DIR)/$(LIB_NAME).js
+gen: hlexport.c
 
 clean:
 	rm -f $(LIB_NAME).hdll
@@ -38,3 +39,4 @@ clean:
 .PHONY: install
 .PHONY: wasm
 .PHONY: hl
+.PHONY: gen
