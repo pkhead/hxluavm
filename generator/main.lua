@@ -281,7 +281,7 @@ do
                     if haxe_type == "CString" then
                         tinsert(hx_bindings_source, "        var _")
                         tinsert(hx_bindings_source, arg.name)
-                        tinsert(hx_bindings_source, " = allocString(")
+                        tinsert(hx_bindings_source, (" = %s == null ? null : allocString("):format(arg.name))
                         tinsert(hx_bindings_source, arg.name)
                         tinsert(hx_bindings_source, ");\n")
 
@@ -579,7 +579,7 @@ do
     }
     
     static inline function _freeString(ptr:NativeUInt) {
-        wasm._free(ptr);
+        if (ptr != null) wasm._free(ptr);
     }
 
     public static function allocFuncPtr<T:Function>(func:T, funcType:FunctionType):FuncPtr<T> {
@@ -587,8 +587,8 @@ do
             case CFunction: "ip";
             case KFunction: "ipip";
             case Hook: "vpp";
-            case Reader: "pppp",
-            case Writer: "ipppp"
+            case Reader: "pppp";
+            case Writer: "ipppp";
         });
     }
 ]]

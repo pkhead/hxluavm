@@ -2,7 +2,7 @@ package luavm;
 
 #if js
 abstract CString(haxe.io.Bytes) {
-    public inline function new(bytes:haxe.io.Bytes) {
+    @:from public inline function new(bytes:haxe.io.Bytes) {
         this = bytes;
     }
 
@@ -13,7 +13,7 @@ abstract CString(haxe.io.Bytes) {
     }
 
     @:from static inline function fromString(s:String) {
-        return new CString(haxe.io.Bytes.ofString(s));
+        return s == null ? null : new CString(haxe.io.Bytes.ofString(s));
     }
 
     @:to public inline function toBytes():haxe.io.Bytes {
@@ -41,7 +41,11 @@ abstract CString(hl.Bytes) from hl.Bytes to hl.Bytes {
     }
 
     @:from static inline function fromString(s:String) {
-        return new CString(hl.Bytes.fromBytes(haxe.io.Bytes.ofString(s)));
+        return s == null ? null : new CString(hl.Bytes.fromBytes(haxe.io.Bytes.ofString(s)));
+    }
+
+    @:from static inline function fromBytes(b:haxe.io.Bytes) {
+        return b == null ? null : new CString(hl.Bytes.fromBytes(b));
     }
 
     @:to public inline function toBytes():haxe.io.Bytes {
