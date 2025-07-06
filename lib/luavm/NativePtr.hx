@@ -38,6 +38,10 @@ abstract NativePtr(NativeUInt) from NativeUInt to NativeUInt {
         return alloc;
     }
 
+    public function free() {
+        LuaNative.wasm._free(this);
+    }
+
     public static inline function fromAddress(addr:NativeUInt):NativePtr {
         return addr;
     }
