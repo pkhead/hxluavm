@@ -312,6 +312,8 @@ class Lua {
     private static var _registryIndex:Int;
     public static var REGISTRYINDEX(get, never):Int;
     inline static function get_REGISTRYINDEX() return _registryIndex;
+
+    public static final MULTRET:Int = -1;
     
 #if js
 $<JS>
