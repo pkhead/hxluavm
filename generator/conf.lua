@@ -399,7 +399,7 @@ $<HL>
     }
 
     public static inline function l_tostring(L:State, idx:Int):String {
-        return LuaNative.luaL_tolstring(L, idx, null);
+        return LuaNative.luaL_tolstring(L, idx, null)?.toString();
     }
 
     public static inline function pushinteger(L:State, n:Int):Void {

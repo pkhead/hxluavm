@@ -317,7 +317,7 @@ do
 
                 tinsert(hx_bindings_source, "        ")
                 if def.ret ~= "void" then
-                    tinsert(hx_bindings_source, "var _res_ = ")
+                    tinsert(hx_bindings_source, "var _res_:Int = ")
                 end
                 tinsert(hx_bindings_source, "wasm._")
                 tinsert(hx_bindings_source, def.name)
@@ -326,7 +326,7 @@ do
                 tinsert(hx_bindings_source, ");\n")
                 tinsert(hx_bindings_source, table.concat(post_call))
                 if def.ret ~= "void" then
-                    tinsert(hx_bindings_source, "        return ")
+                    tinsert(hx_bindings_source, "        return cast (")
 
                     if haxe_ret[target_index] == "haxe.Int64" then
                         tinsert(hx_bindings_source, "haxe.Int64.make(js.Syntax.code(\"Number({0} >> 32n)\", _res_), js.Syntax.code(\"Number({0})\", _res_))")
@@ -336,7 +336,7 @@ do
                         tinsert(hx_bindings_source, "_res_")
                     end
 
-                    tinsert(hx_bindings_source, ";\n")
+                    tinsert(hx_bindings_source, ");\n")
                 end
                 tinsert(hx_bindings_source, "    }\n")
             else

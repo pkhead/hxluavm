@@ -14,6 +14,10 @@ abstract NativePtr(NativeUInt) from NativeUInt to NativeUInt {
         return this;
     }
 
+    public function toString():String {
+        return toBytes(CString.strLen(this, 0)).toString();
+    }
+
     public inline function toInt64() {
         return haxe.Int64.ofInt(this);
     }
