@@ -330,6 +330,8 @@ do
 
                     if haxe_ret[target_index] == "haxe.Int64" then
                         tinsert(hx_bindings_source, "haxe.Int64.make(js.Syntax.code(\"Number({0} >> 32n)\", _res_), js.Syntax.code(\"Number({0})\", _res_))")
+                    elseif string.sub(def.ret, -1) == "*" then
+                        tinsert(hx_bindings_source, "_res_ == 0 ? null : _res_")
                     else
                         tinsert(hx_bindings_source, "_res_")
                     end

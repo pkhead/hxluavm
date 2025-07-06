@@ -21,7 +21,7 @@ abstract CString(haxe.io.Bytes) {
     }
 
     @:to public inline function toString():String {
-        return this.toString();
+        return this?.toString();
     }
 }
 #else
@@ -40,8 +40,14 @@ abstract CString(hl.Bytes) from hl.Bytes to hl.Bytes {
         return bytes.toBytes(strLen(bytes, 0));
     }
 
-    @:from static inline function fromString(s:String) {
-        return s == null ? null : new CString(hl.Bytes.fromBytes(haxe.io.Bytes.ofString(s)));
+    @:from static function fromString(s:String) {
+        if (s == null) return null;
+
+        var bytes1 = haxe.io.Bytes.ofString(s);
+        var bytes2 = haxe.io.Bytes.alloc(bytes1.length + 1);
+        bytes2.blit(0, bytes1, 0, bytes1.length);
+        bytes2.set(bytes2.length-1, 0);
+        return new CString(hl.Bytes.fromBytes(bytes2));
     }
 
     @:from static inline function fromBytes(b:haxe.io.Bytes) {
@@ -49,11 +55,11 @@ abstract CString(hl.Bytes) from hl.Bytes to hl.Bytes {
     }
 
     @:to public inline function toBytes():haxe.io.Bytes {
-        return readCStr(this);
+        return this == null ? null : readCStr(this);
     }
 
     @:to public inline function toString():String {
-        return readCStr(this).toString();
+        return this == null ? null : readCStr(this).toString();
     }
 
     public var hlBytes(get, never):hl.Bytes;

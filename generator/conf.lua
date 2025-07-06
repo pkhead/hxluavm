@@ -398,6 +398,10 @@ $<HL>
         return LuaNative.lua_tointegerx(L, idx, null).low;
     }
 
+    public static inline function l_tostring(L:State, idx:Int):String {
+        return LuaNative.luaL_tolstring(L, idx, null);
+    }
+
     public static inline function pushinteger(L:State, n:Int):Void {
         return LuaNative.lua_pushinteger(L, haxe.Int64.ofInt(n));
     }
@@ -422,6 +426,28 @@ $<HL>
         LuaNative.lua_settop(L, -(n)-1);
     }
 
+    // #define lua_pushglobaltable(L) ((void)lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS))
+    public static function pushglobaltable(L:State) {
+        return LuaNative.lua_rawgeti(L, REGISTRYINDEX, 2);
+    }
+    
+    // #define lua_insert(L,idx)	lua_rotate(L, (idx), 1)
+    public static function insert(L:State, idx:Int) {
+        LuaNative.lua_rotate(L, idx, 1);
+    }
+
+    // #define lua_remove(L,idx)	(lua_rotate(L, (idx), -1), lua_pop(L, 1))
+    public static function remove(L:State, idx:Int) {
+        LuaNative.lua_rotate(L, idx, -1);
+        pop(L, 1);
+    }
+    
+    // #define lua_replace(L,idx)	(lua_copy(L, -1, (idx)), lua_pop(L, 1))
+    public static function replace(L:State, idx:Int) {
+        LuaNative.lua_copy(L, -1, idx);
+        pop(L, 1);
+    }
+    
     public static inline function l_getmetatable(L:State, tname:String) {
         return LuaNative.lua_getfield(L, REGISTRYINDEX, tname);
     }
