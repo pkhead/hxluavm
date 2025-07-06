@@ -29,6 +29,9 @@ conf.haxe_type_mappings = {
     ["lua_CFunction"] = {"_FUN(_I32,_LSTATE)", "Callable<CFunction>", "FuncPtr<CFunction>"},
     ["lua_KFunction"] = {"_FUN(_I32,_LSTATE _I32 _BYTES)", "Callable<KFunction>", "FuncPtr<KFunction>"},
     ["lua_KContext"] = {"_BYTES", "NativePtr", "NativePtr"},
+    ["lua_Reader"] = {"_FUN(_BYTES,_LSTATE _BYTES _BYTES)", "Callable<Reader>", "FuncPtr<Reader>"},
+    -- ["lua_Writer"] = {"_FUN(_I32,_LSTATE _BYTES _BYTES _BYTES)", "Callable<Writer>", "FuncPtr<Writer>"},
+
     ["lua_Hook"] = {"_FUN(_VOID,_LSTATE _BYTES)", "Callable<Hook>", "FuncPtr<Hook>"},
     ["lua_Debug*"] = {"_BYTES", "DebugPtr", "DebugPtr"},
     ["const lua_Debug*"] = {"_BYTES", "DebugPtr", "DebugPtr"}
@@ -263,15 +266,18 @@ import luavm.CString;
 typedef CFunction = State->Int;
 typedef KFunction = (State,Int,NativePtr)->Int;
 typedef Hook = (State,DebugPtr)->Void;
+typedef Reader = (State,NativePtr,NativePtr)->NativePtr;
+// typedef Writer = (State,NativePtr,NativeUInt,NativePtr)->Int;
 
 enum FunctionType {
     CFunction;
     KFunction;
     Hook;
+    Reader;
+    Writer;
 }
 
 #if js
-// typedef Reader = Callable<(State, hl.Bytes, hl.Ref<haxe.Int64>)->hl.Bytes>
 abstract FuncPtr<T:Function>(Int) from Int to Int {}
 
 #else

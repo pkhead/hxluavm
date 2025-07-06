@@ -69,7 +69,7 @@ do
 #include <emscripten.h>
 ]])
 
-    local func_types = {"lua_CFunction", "lua_KFunction", "lua_Hook"}
+    local func_types = {"lua_CFunction", "lua_KFunction", "lua_Hook", "lua_Reader", "lua_Writer"}
 
     -- 1: hl.h type
     -- 2: haxe hl type
@@ -78,12 +78,13 @@ do
 
     local haxe_trivial_types = {
         "Void", "Int", "Single", "Float", "State", "CString",
-        
-        "Callable<CFunction>", "Callable<KFunction>", "Callable<Hook>",
-        "FuncPtr<CFunction>", "FuncPtr<KFunction>", "FuncPtr<Hook>",
-        
         "DebugPtr"
     }
+
+    for _, t in ipairs({"CFunction", "KFunction", "Hook", "Reader", "Writer"}) do
+        tinsert(haxe_trivial_types, ("Callable<%s>"):format(t))
+        tinsert(haxe_trivial_types, ("FuncPtr<%s>"):format(t))
+    end
 
     local hx_js_bindings_source = {}
     local hx_hl_bindings_source = {}
@@ -586,6 +587,8 @@ do
             case CFunction: "ip";
             case KFunction: "ipip";
             case Hook: "vpp";
+            case Reader: "pppp",
+            case Writer: "ipppp"
         });
     }
 ]]
