@@ -8,6 +8,7 @@ import haxe.macro.Expr;
  */
 class ClassWrapper {
     public static macro function push(L:ExprOf<State>, v:Expr) {
+        // trace("try push");
         return ClassWrapperMacros.pushObjectWrapper(L, v);
     }
 
@@ -15,8 +16,8 @@ class ClassWrapper {
         return ClassWrapperMacros.pushObjectClass(L, cl);
     }
 
-    public static macro function checkType(L:ExprOf<State>, idx:ExprOf<Int>, cl:Expr) {
-        var wrapper = ClassWrapperMacros.getTypeWrapper(ClassWrapperMacros.parseClassType(cl));
-        return macro $i{wrapper}.getObject($L, $idx);
-    }
+    // public static macro function checkType(L:ExprOf<State>, idx:ExprOf<Int>, cl:Expr) {
+    //     var wrapper = ClassWrapperMacros.getTypeWrapper(ClassWrapperMacros.parseClassType(cl));
+    //     return macro $i{wrapper}.getObject($L, $idx);
+    // }
 }

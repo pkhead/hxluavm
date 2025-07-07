@@ -1,12 +1,18 @@
 // import luavm.Lua;
+import testpkg.LuaStringArray;
 import luavm.HookMask;
-import testpkg.TestClass;
 import luavm.LuaNative;
 import luavm.Lua;
 import luavm.State;
 import luavm.ThreadStatus;
 import luavm.util.FuncHelper;
 import luavm.util.ClassWrapper;
+
+// import testpkg.LuaFloatArray;
+
+// class TestClass {
+//     static var wrapCache:Map<testpkg.LuaStringArray, Int> = [];
+// }
 
 class Main {
     // static function addFunc(L:State) {
@@ -57,55 +63,75 @@ class Main {
         trace("hook activated", ar.event);
     }
 
-    public static function main() {
+    // static function tests1(L:luavm.State) {
+    //     FuncHelper.push(L, (L) -> {
+    //         var a = Lua.l_checknumber(L, 1);
+    //         var b = Lua.l_checknumber(L, 2);
+
+    //         Lua.pushnumber(L, a + b);
+    //         return 1;
+    //     });
+    //     Lua.setglobal(L, "add");
+
+    //     #if js
+    //     FuncHelper.push(L, (L) -> {
+    //         var count = Lua.gettop(L);
+    //         var strs = [];
+    //         for (i in 0...count) {
+    //             strs.push(Lua.tostring(L, 1 + i));
+    //         }
+
+    //         js.html.Console.log(strs.join("  "));
+
+    //         return 0;
+    //     });
+    //     Lua.setglobal(L, "print");
+
+    //     FuncHelper.push(L, (L) -> {
+    //         var count = Lua.gettop(L);
+    //         var strs = [];
+    //         for (i in 0...count) {
+    //             strs.push(Lua.tostring(L, 1 + i));
+    //         }
+
+    //         js.html.Console.warn(strs.join("  "));
+
+    //         return 0;
+    //     });
+    //     Lua.setglobal(L, "warn");
+    //     #end
+
+    //     // ClassWrapper.push(L, new TestClass(4, "hi"));
+    //     ClassWrapper.pushClass(L, TestClass);
+    //     Lua.setglobal(L, "TestClass");
+
+    //     ClassWrapper.pushClass(L, LuaFloatArray);
+    //     Lua.setglobal(L, "FloatArray");
+
+    //     #if js
+    //     var f = LuaNative.allocFuncPtr(luaHook, Hook);
+    //     #else
+    //     var f = luaHook;
+    //     #end
+
+    //     Lua.sethook(L, f, HookMask.MaskLine, 0);
+    // }
+
+    static function tests2(L:luavm.State) {
+        // Macros.test();
+        // var testMap:Map<LuaStringArray, Int> = [];
+        // trace(testMap);
+        ClassWrapper.pushClass(L, testpkg.LuaStringArray);
+        Lua.setglobal(L, "StringArray");
+    }
+
+    public static function main1() {
         Lua.init(() -> {            
             var L = Lua.l_newstate();
             Lua.l_openlibs(L);
             FuncHelper.init(L);
 
-            FuncHelper.push(L, (L) -> {
-                var a = Lua.l_checknumber(L, 1);
-                var b = Lua.l_checknumber(L, 2);
-
-                Lua.pushnumber(L, a + b);
-                return 1;
-            });
-            Lua.setglobal(L, "add");
-
-            #if js
-            FuncHelper.push(L, (L) -> {
-                var count = Lua.gettop(L);
-                var strs = [];
-                for (i in 0...count) {
-                    strs.push(Lua.tostring(L, 1 + i));
-                }
-
-                js.html.Console.log(strs.join("  "));
-
-                return 0;
-            });
-            Lua.setglobal(L, "print");
-
-            FuncHelper.push(L, (L) -> {
-                var count = Lua.gettop(L);
-                var strs = [];
-                for (i in 0...count) {
-                    strs.push(Lua.tostring(L, 1 + i));
-                }
-
-                js.html.Console.warn(strs.join("  "));
-
-                return 0;
-            });
-            Lua.setglobal(L, "warn");
-            #end
-
-            // ClassWrapper.push(L, new TestClass(4, "hi"));
-            ClassWrapper.pushClass(L, TestClass);
-            Lua.setglobal(L, "TestClass");
-
-            ClassWrapper.pushClass(L, LuaFloatArray);
-            Lua.setglobal(L, "FloatArray");
+            tests2(L);
 
             #if sys
             var str = sys.io.File.getContent("code.lua");
@@ -120,22 +146,8 @@ class Main {
                 Lua.l_traceback(L, L, err, 0);
                 trace(Lua.tostring(L, -1));
 
-                var ar = DebugPtr.alloc();
-                Lua.getstack(L, 2, ar);
-                Lua.getinfo(L, "nSl", ar);
-                trace(ar.short_src);
-                ar.free();
-
                 return 0;
             });
-
-            #if js
-            var f = LuaNative.allocFuncPtr(luaHook, Hook);
-            #else
-            var f = luaHook;
-            #end
-
-            Lua.sethook(L, f, HookMask.MaskLine, 0);
 
             if (Lua.l_loadstring(L, str) != cast ThreadStatus.Ok) {
                 trace("parse error!");
@@ -149,5 +161,13 @@ class Main {
 
             Lua.close(L);
         });
+    }
+
+    public static function main2() {
+
+    }
+
+    public static function main() {
+        main1();
     }
 }

@@ -43,31 +43,31 @@ class LuaFloatArray {
     }
 }
 
-@:luaExpose
-class TestClass {
-    public static final CONST = 3;
+// @:luaExpose
+// class TestClass {
+//     public static final CONST = 3;
 
-    @:luaName("int_field")
-    public var intField:Int;
+//     @:luaName("int_field")
+//     public var intField:Int;
 
-    @:luaName("string_field")
-    public var stringField:String;
+//     @:luaName("string_field")
+//     public var stringField:String;
 
-    @:luaName("array_field")
-    public var arrayField:LuaFloatArray;
+//     @:luaName("array_field")
+//     public var arrayField:LuaFloatArray;
 
-    @:luaFunc @:luaName("new")
-    static function luaCtor(L:luavm.State):Int {
-        var int = Lua.l_checkinteger(L, 1);
-        var str = Lua.l_checkstring(L, 2);
-        var arr = ClassWrapper.checkType(L, 3, LuaFloatArray);
-        ClassWrapper.push(L, new TestClass(int, str, arr));
-        return 1;
-    }
+//     @:luaFunc @:luaName("new")
+//     static function luaCtor(L:luavm.State):Int {
+//         var int = Lua.l_checkinteger(L, 1);
+//         var str = Lua.l_checkstring(L, 2);
+//         var arr = ClassWrapper.checkType(L, 3, LuaFloatArray);
+//         ClassWrapper.push(L, new TestClass(int, str, arr));
+//         return 1;
+//     }
 
-    public function new(int:Int, str:String, arr:LuaFloatArray) {
-        intField = int;
-        stringField = str;
-        arrayField = arr;
-    }
-}
+//     public function new(int:Int, str:String, arr:LuaFloatArray) {
+//         intField = int;
+//         stringField = str;
+//         arrayField = arr;
+//     }
+// }
