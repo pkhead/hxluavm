@@ -47,13 +47,20 @@ class ClassWrapperMacros {
             }
         }
 
-        function pushNonPrimitive(typeStr:String, v:Expr):Expr {
+        function pushNonPrimitive(type:Type, v:Expr):Expr {
+            #if target.static
+            var realType = Context.followWithAbstracts(type);
+            if (isPrimitive(TypeTools.toString(realType))) {
+                return macro luavm.util.ClassWrapper.pushObject(L, $v);
+            }
+            #end
+
             return macro {
                 var tmp = $e{v};
                 if (tmp == null) {
                     luavm.Lua.pushnil(L);
                 } else {
-                    $e{switch (typeStr) {
+                    $e{switch (TypeTools.toString(type)) {
                         case "String": macro luavm.Lua.pushstring(L, tmp);
                         default: macro luavm.util.ClassWrapper.pushObject(L, tmp);
                     }}
@@ -78,7 +85,7 @@ class ClassWrapperMacros {
                                 }
                             }
                         } else {
-                            pushNonPrimitive(tstr, value);
+                            pushNonPrimitive(params[0], value);
                         }
                     } else if (isPrimitive(atrStr)) {
                         #if target.static
@@ -94,11 +101,11 @@ class ClassWrapperMacros {
                         }
                         #end
                     } else {
-                        pushNonPrimitive(atrStr, value);
+                        pushNonPrimitive(typeArg, value);
                     }
                 
                 case TInst(tr, params):
-                    pushNonPrimitive(tr.toString(), value);
+                    pushNonPrimitive(typeArg, value);
 
                 case v: typeErr(TypeTools.toString(v), Context.currentPos());
             };
@@ -118,6 +125,16 @@ class ClassWrapperMacros {
         }
 
         function getNonPrimitive(type:Type):Expr {
+            #if target.static
+            var realType = Context.followWithAbstracts(type);
+            if (isPrimitive(TypeTools.toString(realType))) {
+                var complexType = TypeTools.toComplexType(type);
+                var className = getTypeWrapper(complexType);
+
+                return macro $i{className}.getObject(L, $stackIndex);
+            }
+            #end
+
             return macro {
                 if (luavm.Lua.isnoneornil(L, $stackIndex)) {
                     null;
@@ -131,13 +148,7 @@ class ClassWrapperMacros {
                             );
                             var className = getTypeWrapper(complexType);
 
-                            macro {
-                                var v = $i{className}.getObject(L, $stackIndex);
-                                if (v == null) {
-                                    return luavm.Lua.l_error(L, "internal error: invalid object");
-                                }
-                                v;
-                            }
+                            macro $i{className}.getObject(L, $stackIndex);
                     }}
                 }
             }
@@ -533,7 +544,7 @@ class ClassWrapperMacros {
                 static public function getObject(L:luavm.State, idx:Int):$t {
                     var udPtr = luavm.Lua.l_checkudata(L, idx, $v{mtName});
                     var id = udPtr.getI32(0);
-                    return cast wrapIDs[id];
+                    return (cast wrapIDs[id]) ?? throw new haxe.Exception($v{"internal error: invalid object for " + fullName});
                 }
 
                 @:access($whyDoesntPrivateAccessWorkINeedToDoThisInstead)
