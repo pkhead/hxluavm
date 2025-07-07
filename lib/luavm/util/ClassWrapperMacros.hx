@@ -211,7 +211,7 @@ class ClassWrapperMacros {
 
         switch (field.kind) {
             case FVar(AccNormal|AccCall, _):
-                var fieldExpr = macro @:privateAccess $objIdent.$fieldName;
+                var fieldExpr = macro $objIdent.$fieldName;
                 var caseExpr = luaPushValue(field.type, fieldExpr);
 
                 cases.push({
@@ -257,7 +257,7 @@ class ClassWrapperMacros {
                         if (fieldName == "new") {
                             switch (setup.classTypeComplex) {
                                 case TPath(p):
-                                    var callExpr = macro @:privateAccess new $p($a{callArgs});
+                                    var callExpr = macro new $p($a{callArgs});
                                     funcDef.push(luaPushValue(ComplexTypeTools.toType(setup.classTypeComplex), callExpr));
                                     funcDef.push(macro return 1);
 
@@ -265,9 +265,9 @@ class ClassWrapperMacros {
                                     Context.error("internal error: classTypeComplex is not a TPath?", Context.currentPos());
                             }
                         } else {
-                            var callExpr = macro @:privateAccess $callTarget.$fieldName($a{callArgs});
+                            var callExpr = macro $callTarget.$fieldName($a{callArgs});
                             if (TypeTools.toString(ret) == "Void") {
-                                var callExpr = macro @:privateAccess $callTarget.$fieldName($a{callArgs});
+                                var callExpr = macro $callTarget.$fieldName($a{callArgs});
                                 funcDef.push(callExpr);
                                 funcDef.push(macro return 0);
                             } else {
@@ -313,7 +313,7 @@ class ClassWrapperMacros {
 
         switch (field.kind) {
             case FVar(_, AccNormal|AccCall) if (!field.isFinal && (field.isPublic || field.meta.has(":luaExpose"))):
-                var fieldExpr = macro @:privateAccess $objIdent.$fieldName;
+                var fieldExpr = macro $objIdent.$fieldName;
                 var caseExpr = macro $e{fieldExpr} = $e{luaGetValue(field.type, macro 3)};
 
                 cases.push({
@@ -488,6 +488,8 @@ class ClassWrapperMacros {
                 
                 default: Context.fatalError("Cannot wrap type " + fullName, Context.currentPos());
             }
+
+            var whyDoesntPrivateAccessWorkINeedToDoThisInstead = macro $p{fullName.split(".")};
             
             typeWrapper = macro class $typeWrapperClassName {
                 static var wrapIDs:Map<Int, $actualType> = [];
@@ -512,6 +514,7 @@ class ClassWrapperMacros {
                     return cast wrapIDs[id];
                 }
 
+                @:access($whyDoesntPrivateAccessWorkINeedToDoThisInstead)
                 static function luaIndex(L:luavm.State):Int {
                     var self = getObject(L, 1);
                     var key = luavm.Lua.l_checkstring(L, 2);
@@ -521,6 +524,7 @@ class ClassWrapperMacros {
                     return 1;
                 }
 
+                @:access($whyDoesntPrivateAccessWorkINeedToDoThisInstead)
                 static function luaNewIndex(L:luavm.State):Int {
                     var udPtr = luavm.Lua.l_checkudata(L, 1, $v{mtName});
                     var id = udPtr.getI32(0);
@@ -532,6 +536,7 @@ class ClassWrapperMacros {
                     return 0;
                 }
 
+                @:access($whyDoesntPrivateAccessWorkINeedToDoThisInstead)
                 static function luaStaticIndex(L:luavm.State):Int {
                     // var self = getObject(L, 1);
                     var key = luavm.Lua.l_checkstring(L, 2);
@@ -541,6 +546,7 @@ class ClassWrapperMacros {
                     return 1;
                 }
 
+                @:access($whyDoesntPrivateAccessWorkINeedToDoThisInstead)
                 static function luaStaticNewIndex(L:luavm.State):Int {
                     // var self = getObject(L, 1);
                     var key = luavm.Lua.l_checkstring(L, 2);
@@ -554,7 +560,8 @@ class ClassWrapperMacros {
                     luavm.Lua.pushstring(L, "metatable is locked");
                     return 1;
                 }
-
+                
+                @:access($whyDoesntPrivateAccessWorkINeedToDoThisInstead)
                 static function init(L:luavm.State) {
                     // create static class table
                     luavm.Lua.createtable(L, 0, 0);
