@@ -15,3 +15,4 @@ end
 local class = TestClass.new(arr)
 print(#class.array)
 class.array = nil
+print(class.number)

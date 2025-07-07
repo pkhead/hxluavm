@@ -42,7 +42,7 @@ class ClassWrapperMacros {
                 case "Int": macro luavm.Lua.pushinteger(L, $e{v});
                 case "Float": macro luavm.Lua.pushnumber(L, $e{v});
                 case "Single": macro luavm.Lua.pushnumber(L, $e{v});
-                case "Bool": macro luavm.Lua.pushboolean(L, $e{v} ? 1 : 0);
+                case "Bool": macro luavm.Lua.pushboolean(L, $e{v});
                 default: typeErr(typeString, Context.currentPos());
             }
         }
@@ -61,42 +61,50 @@ class ClassWrapperMacros {
             }
         }
 
-        return switch (TypeTools.follow(type)) {
-            case TAbstract(atr, params):
-                var atrStr = atr.toString();
+        function parse(typeArg:Type) {
+            return switch (typeArg) {
+                case TAbstract(atr, params):
+                    var atrStr = atr.toString();
 
-                if (atrStr == "Null" && isPrimitive(TypeTools.toString(params[0]))) {
-                    macro {
-                        var tmp = $e{value};
-                        if (tmp == null) {
-                            luavm.Lua.pushnil(L);
+                    if (atrStr == "Null") {
+                        var tstr = TypeTools.toString(params[0]);
+                        if (isPrimitive(tstr)) {
+                            macro {
+                                var tmp = $e{value};
+                                if (tmp == nul) {
+                                    luavm.Lua.pushnil(L);
+                                } else {
+                                    $e{pushPrimitive(TypeTools.toString(params[0]), macro $i{"tmp"})};
+                                }
+                            }
                         } else {
-                            $e{pushPrimitive(TypeTools.toString(params[0]), macro $i{"tmp"})};
+                            pushNonPrimitive(tstr, value);
                         }
-                    }
-                }
-                else if (isPrimitive(atrStr)) {
-                    #if target.static
-                    pushPrimitive(atrStr, value);
-                    #else
-                    macro {
-                        var tmp = $e{value};
-                        if (tmp == null) {
-                            luavm.Lua.pushnil(L);
-                        } else {
-                            $e{pushPrimitive(atrStr, macro $i{"tmp"})};
+                    } else if (isPrimitive(atrStr)) {
+                        #if target.static
+                        pushPrimitive(atrStr, value);
+                        #else
+                        macro {
+                            var tmp = $e{value};
+                            if (tmp == null) {
+                                luavm.Lua.pushnil(L);
+                            } else {
+                                $e{pushPrimitive(atrStr, macro $i{"tmp"})};
+                            }
                         }
+                        #end
+                    } else {
+                        pushNonPrimitive(atrStr, value);
                     }
-                    #end
-                } else {
-                    pushNonPrimitive(atrStr, value);
-                }
-            
-            case TInst(tr, params):
-                pushNonPrimitive(tr.toString(), value);
+                
+                case TInst(tr, params):
+                    pushNonPrimitive(tr.toString(), value);
 
-            case v: typeErr(TypeTools.toString(v), Context.currentPos());
-        };
+                case v: typeErr(TypeTools.toString(v), Context.currentPos());
+            };
+        }
+
+        return parse(TypeTools.follow(type));
     }
 
     static function luaGetValue(desiredType:Type, stackIndex:Expr):Expr {
@@ -104,7 +112,7 @@ class ClassWrapperMacros {
             return switch (typeString) {
                 case "Int": macro luavm.Lua.l_checkinteger(L, $stackIndex);
                 case "Float" | "Single": macro luavm.Lua.l_checknumber(L, $stackIndex);
-                case "Bool": macro luavm.Lua.toboolean(L, $stackIndex) != 0;
+                case "Bool": macro luavm.Lua.toboolean(L, $stackIndex);
                 case v: typeErr(v, Context.currentPos());
             }
         }
@@ -137,31 +145,37 @@ class ClassWrapperMacros {
 
         // var realType = TypeTools.follow(desiredType);
         var realType = desiredType;
-        return switch (realType) {
-            case TAbstract(atr, params):
-                var atrStr = atr.toString();
-
-                if (atrStr == "Null") {
-                    if (isPrimitive(TypeTools.toString(params[0]))) {
-                        macro if (luavm.Lua.isnoneornil(L, $stackIndex)) {
-                            null;
+        function parse(type:Type) {
+            return switch (type) {
+                case TAbstract(atr, params):
+                    var atrStr = atr.toString();
+    
+                    if (atrStr == "Null") {
+                        if (isPrimitive(TypeTools.toString(params[0]))) {
+                            macro if (luavm.Lua.isnoneornil(L, $stackIndex)) {
+                                null;
+                            } else {
+                                $e{getPrimitive(TypeTools.toString(params[0]))}
+                            }
                         } else {
-                            $e{getPrimitive(TypeTools.toString(params[0]))}
+                            getNonPrimitive(params[0]);
                         }
+                    } else if (isPrimitive(atrStr)) {
+                        getPrimitive(atrStr);
                     } else {
-                        getNonPrimitive(params[0]);
+                        getNonPrimitive(type);
                     }
-                } else if (isPrimitive(atrStr)) {
-                    getPrimitive(atrStr);
-                } else {
-                    getNonPrimitive(realType);
-                }
-            
-            case TInst(tr, params):
-                getNonPrimitive(realType);
+                
+                case TInst(tr, params):
+                    getNonPrimitive(type);
 
-            case v: typeErr(TypeTools.toString(v), Context.currentPos());
+                case TLazy(f): parse(f());
+    
+                case v: typeErr(TypeTools.toString(v), Context.currentPos());
+            }
         }
+
+        return parse(realType);
     }
 
     static function getFieldName(field:ClassField, ?defaultName:String) {
