@@ -688,7 +688,24 @@ class ClassWrapperMacros {
     public static function pushObjectWrapper(L:Expr, v:Expr):Expr {
         var argType = Context.follow(Context.typeof(v));
         var wrapper = getTypeWrapper(TypeTools.toComplexType(argType));
-        return macro $i{wrapper}.push($L, $v);
+
+        #if target.static
+        if (isPrimitive(TypeTools.toString(TypeTools.followWithAbstracts(argType)))) {
+            return macro $i{wrapper}.push($L, $v);
+        } else {
+            return macro {
+                var tmp = $v;
+                if (tmp == null) luavm.Lua.pushnil($L);
+                else $i{wrapper}.push($L, tmp);
+            }
+        }
+        #else
+        return macro {
+            var tmp = $v;
+            if (tmp == null) luavm.Lua.pushnil($L);
+            else $i{wrapper}.push($L, tmp);
+        }
+        #end
     }
 
     public static function pushMetatable(L:Expr, t:Expr):Expr {
