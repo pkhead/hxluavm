@@ -1,3 +1,4 @@
+-- configuration for lua 5.4
 local conf = {}
 
 conf.size_t = "unsigned int"
@@ -292,6 +293,20 @@ $<HL>
 #end
 ]]
 
+conf.bool_returns = {
+    "lua_isnumber",
+    "lua_isstring",
+    "lua_iscfunction",
+    "lua_isinteger",
+    "lua_isuserdata",
+    "lua_isyieldable",
+    "lua_toboolean"
+}
+
+conf.wrapper_ignore = {
+    "lua_pushboolean"
+}
+
 conf.hx_lua_wrapper = [[package luavm;
 import luavm.State;
 import luavm.LuaNative;
@@ -544,6 +559,10 @@ $<HL>
 
     public static inline function upvalueindex(i:Int) {
         return REGISTRYINDEX - i;
+    }
+
+    public static inline function pushboolean(L:State, b:Bool):Void {
+        LuaNative.lua_pushboolean(L, b ? 1 : 0);
     }
 
     public static inline function isfunction(L:State, idx:Int) return LuaNative.lua_type(L, idx) == cast LuaType.TFunction;

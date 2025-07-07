@@ -159,8 +159,10 @@ do
             local haxe_params = {}
             local arg_names = {}
             local param_strs = {}
-            local write_to_haxe_wrapper = table.find(haxe_trivial_types, haxe_ret[target_index]) ~= nil
             local write_to_c_source = true
+            local write_to_haxe_wrapper =
+                table.find(haxe_trivial_types, haxe_ret[target_index]) ~= nil
+                and not table.find(conf.wrapper_ignore, def.name)
 
             if def.name:sub(1, 5) == "luaX_" then
                 write_to_haxe_wrapper = false
@@ -361,15 +363,21 @@ do
                 end
                 local wrapper_name = name_prefix .. string.sub(def.name, string.find(def.name, "_", 1, true)+1, -1)
 
-                table.insert(hx_wrapper_content, "    public static inline function ")
-                table.insert(hx_wrapper_content, wrapper_name)
-                table.insert(hx_wrapper_content, "(")
-                table.insert(hx_wrapper_content, table.concat(haxe_params, ", "))
-                table.insert(hx_wrapper_content, ") return LuaNative.")
-                table.insert(hx_wrapper_content, def.name)
-                table.insert(hx_wrapper_content, "(")
-                table.insert(hx_wrapper_content, table.concat(jfeowj, ", "))
-                table.insert(hx_wrapper_content, ");\n")
+                tinsert(hx_wrapper_content, "    public static inline function ")
+                tinsert(hx_wrapper_content, wrapper_name)
+                tinsert(hx_wrapper_content, "(")
+                tinsert(hx_wrapper_content, table.concat(haxe_params, ", "))
+                tinsert(hx_wrapper_content, ") return LuaNative.")
+                tinsert(hx_wrapper_content, def.name)
+                tinsert(hx_wrapper_content, "(")
+                tinsert(hx_wrapper_content, table.concat(jfeowj, ", "))
+                tinsert(hx_wrapper_content, ")")
+
+                if table.find(conf.bool_returns, def.name) then
+                    tinsert(hx_wrapper_content, " != 0")
+                end
+
+                tinsert(hx_wrapper_content, ";\n")
             end
 
             ::skip_this_def::

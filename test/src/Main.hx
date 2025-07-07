@@ -121,7 +121,7 @@ class Main {
         // override __index
         Lua.getfield(L, -1, "__index");
         FuncHelper.pushClosure(L, 1, (L:luavm.State) -> {
-            if (Lua.isnumber(L, 2) != 0) {
+            if (Lua.isnumber(L, 2)) {
                 var obj = ClassWrapper.checkObject(L, 1, LuaStringArray);
                 var idx = Lua.tointeger(L, 2) - 1;
 
@@ -144,7 +144,7 @@ class Main {
         // override __newindex
         Lua.getfield(L, -1, "__newindex");
         FuncHelper.pushClosure(L, 1, (L:luavm.State) -> {
-            if (Lua.isnumber(L, 2) != 0) {
+            if (Lua.isnumber(L, 2)) {
                 var obj = ClassWrapper.checkObject(L, 1, LuaStringArray);
                 var idx = Lua.tointeger(L, 2) - 1;
                 var value = Lua.l_checkstring(L, 3);
