@@ -78,7 +78,4 @@ It also provides these compiler metadatas for guiding the wrapper generation pro
     - **class**: Put this on a class to signify the generator can wrap around this. If not, it will throw an error on any attempts to process this class type.
     - **field**: By default, private fields will be hidden. Use this to force it to be exposed.
 - `@:luaName(nm:String)`: Put this on a field to set the name of the field on the Lua side. If not specified, it will use the name of the Haxe field.
-- `@:luaFunc` Put this on a function field to indicate that it is a direct Lua "CFunction"; that is, with the signature `(L:State)->Int`. This will also ignore the access modifier of the field.
 - `@:luaHide` Do not expose this field to Lua.
-
-Note that currently, functions will only be exposed if they have the `@:luaFunc` tag.

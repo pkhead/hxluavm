@@ -121,6 +121,68 @@ class Main {
         // Macros.test();
         // var testMap:Map<LuaStringArray, Int> = [];
         // trace(testMap);
+        ClassWrapper.pushMetatable(L, LuaStringArray);
+
+        // override __index
+        Lua.getfield(L, -1, "__index");
+        FuncHelper.pushClosure(L, 1, (L:luavm.State) -> {
+            if (Lua.isnumber(L, 2) != 0) {
+                var obj = ClassWrapper.checkObject(L, 1, LuaStringArray);
+                var idx = Lua.tointeger(L, 2) - 1;
+
+                if (idx < 0 || idx >= obj.array.length) {
+                    return Lua.l_error(L, "index is out of bounds of the array");
+                }
+
+                Lua.pushstring(L, obj.array[idx]);
+                return 1;
+            } else {
+                Lua.pushvalue(L, Lua.upvalueindex(2));
+                Lua.pushvalue(L, 1);
+                Lua.pushvalue(L, 2);
+                Lua.call(L, 2, 1);
+                return 1;
+            }
+        });
+        Lua.setfield(L, -2, "__index");
+
+        // override __newindex
+        Lua.getfield(L, -1, "__newindex");
+        FuncHelper.pushClosure(L, 1, (L:luavm.State) -> {
+            if (Lua.isnumber(L, 2) != 0) {
+                var obj = ClassWrapper.checkObject(L, 1, LuaStringArray);
+                var idx = Lua.tointeger(L, 2) - 1;
+                var value = Lua.l_checkstring(L, 3);
+
+                if (idx == obj.array.length) {
+                    obj.array.push(value);
+                } else if (idx < 0 || idx >= obj.array.length) {
+                    return Lua.l_error(L, "index is out of bounds of the array");
+                } else {
+                    obj.array[idx] = value;
+                }
+
+            } else {
+                Lua.pushvalue(L, Lua.upvalueindex(2));
+                Lua.pushvalue(L, 1);
+                Lua.pushvalue(L, 2);
+                Lua.pushvalue(L, 3);
+                Lua.call(L, 3, 1);
+            }
+
+            return 0;
+        });
+        Lua.setfield(L, -2, "__newindex");
+
+        FuncHelper.push(L, (L:luavm.State) -> {
+            var obj = ClassWrapper.checkObject(L, 1, LuaStringArray);
+            Lua.pushinteger(L, obj.length);
+            return 1;
+        });
+        Lua.setfield(L, -2, "__len");
+
+        Lua.pop(L, 1);
+
         ClassWrapper.pushClass(L, testpkg.LuaStringArray);
         Lua.setglobal(L, "StringArray");
     }

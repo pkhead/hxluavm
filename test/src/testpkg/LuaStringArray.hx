@@ -19,6 +19,10 @@ abstract LuaStringArray(Array<String>) {
     public inline function new() {
         this = [];
     }
+
+    @:luaHide
+    public var array(get, never):Array<String>;
+    inline function get_array() return this;
     
     public var length(get, never):Int;
     inline function get_length() return this.length;

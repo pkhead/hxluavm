@@ -89,4 +89,27 @@ class FuncHelper {
 
         LuaNative.lua_pushcclosure(L, callCallbackHandle, 1);
     }
+
+    /**
+     * Push a closure of a Haxe function onto the Lua stack with upvalues.
+     * Refer to [the Lua manual](https://www.lua.org/manual/5.4/manual.html#lua_pushcclosure)
+     * 
+     * Note: The second upvalue index is the first user-defined upvalue. The first
+     * upvalue will exist to internal data.
+     * @param L The Lua state.
+     * @param func The CFunction to push.
+     */
+    public static function pushClosure(L:luavm.State, upvalues:Int, func:luavm.State->Int) {
+        var ptr = LuaNative.lua_newuserdatauv(L, 4, 1);
+        ptr.setI32(0, nextId);
+        funcMap[nextId] = func;
+        nextId++;
+
+        Lua.l_getmetatable(L, HX_CLOSURE_MT);
+        Lua.setmetatable(L, -2);
+
+        Lua.insert(L, -upvalues - 1);
+
+        LuaNative.lua_pushcclosure(L, callCallbackHandle, upvalues + 1);
+    }
 }
