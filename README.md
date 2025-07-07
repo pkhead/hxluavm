@@ -88,3 +88,4 @@ It also provides these compiler metadatas for guiding the wrapper generation pro
     - **field**: By default, private fields will be hidden. Use this to force it to be exposed.
 - `@:luaName(nm:String)`: Put this on a field to set the name of the field on the Lua side. If not specified, it will use the name of the Haxe field.
 - `@:luaHide` Do not expose this field to Lua.
+- `@:luaCatch` If an exception occurs while accessing this field, throw a Lua error.

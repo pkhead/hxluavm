@@ -209,15 +209,12 @@ class ClassWrapperMacros {
 
         if (!(field.isPublic || field.meta.has(":luaExpose"))) return;
 
-        switch (field.kind) {
+        var caseExpr = switch (field.kind) {
             case FVar(AccNormal|AccCall, _):
                 var fieldExpr = macro $objIdent.$fieldName;
-                var caseExpr = luaPushValue(field.type, fieldExpr);
-
-                cases.push({
-                    values: [caseValue],
-                    expr: caseExpr
-                });
+                
+                // report this
+                luaPushValue(field.type, fieldExpr);
             
             case FMethod(k):
                 var fieldType = field.expr().t;
@@ -288,17 +285,28 @@ class ClassWrapperMacros {
                     luavm.Lua.setfield(L, -2, $v{luaFieldName});
                 });
 
-                var caseExpr = macro {
+                // report this
+                macro {
                     luavm.Lua.getfield(L, luavm.Lua.REGISTRYINDEX, $v{regName});
                     luavm.Lua.getfield(L, -1, $v{luaFieldName});
                 }
-
-                cases.push({
-                    values: [caseValue],
-                    expr: caseExpr
-                });
             
-            default:
+            default: null;
+        }
+
+        if (caseExpr != null) {
+            if (field.meta.has(":luaCatch")) {
+                caseExpr = macro try {
+                    $e{caseExpr};
+                } catch(e) {
+                    return luavm.Lua.l_error(L, e.message);
+                } 
+            }
+            
+            cases.push({
+                values: [caseValue],
+                expr: caseExpr
+            });
         }
     }
 
@@ -311,17 +319,30 @@ class ClassWrapperMacros {
         var objIdent = setup.objIdent;
         var isStatic = setup.isStatic;
 
-        switch (field.kind) {
+        var caseExpr = switch (field.kind) {
             case FVar(_, AccNormal|AccCall) if (!field.isFinal && (field.isPublic || field.meta.has(":luaExpose"))):
                 var fieldExpr = macro $objIdent.$fieldName;
-                var caseExpr = macro $e{fieldExpr} = $e{luaGetValue(field.type, macro 3)};
+                
+                // report this value
+                macro $e{fieldExpr} = $e{luaGetValue(field.type, macro 3)};
 
-                cases.push({
-                    values: [caseValue],
-                    expr: caseExpr
-                });
-            
-            default:
+                
+            default: null;
+        }
+
+        if (caseExpr != null) {
+            if (field.meta.has(":luaCatch")) {
+                caseExpr = macro try {
+                    $e{caseExpr};
+                } catch(e) {
+                    return luavm.Lua.l_error(L, e.message);
+                } 
+            }
+
+            cases.push({
+                values: [caseValue],
+                expr: caseExpr
+            });
         }
     }
 
@@ -443,7 +464,8 @@ class ClassWrapperMacros {
                     data.isAbstract = true;
                     
                     if (abt.impl != null) {
-                        actualType = TypeTools.toComplexType(abt.type);
+                        // actualType = TypeTools.toComplexType(abt.type);
+                        actualType = TypeTools.toComplexType(Context.followWithAbstracts(abt.type));
                         var impl = abt.impl.get();
 
                         for (field in impl.statics.get()) {
