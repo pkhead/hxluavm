@@ -11,9 +11,7 @@ arr:push("d")
 for i=1, #arr do
     print(i, arr[i])
 end
--- arr[1] = "Hi"
--- print(arr[1])
--- arr[2] = "foo"
--- arr[3] = "bar"
--- -- print(arr[4])
--- print(#arr)
+
+local class = TestClass.new(arr)
+print(#class.array)
+class.array = nil

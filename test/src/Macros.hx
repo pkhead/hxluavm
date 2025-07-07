@@ -1,4 +1,4 @@
-import luavm.util.ClassWrapperMacros;
+import luavm.util.ClassWrapper;
 import haxe.macro.ComplexTypeTools;
 import haxe.macro.TypeTools;
 import haxe.macro.Context;
@@ -15,7 +15,7 @@ class Macros {
 
     #if macro
     public static function init() {
-        ClassWrapperMacros.registerSubstitute("Array<String>", "testpkg.LuaStringArray");
+        ClassWrapper.registerTypeSubstitute("Array<String>", "testpkg.LuaStringArray");
     }
     #end
 }

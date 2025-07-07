@@ -46,4 +46,20 @@ class ClassWrapper {
         var wrapper = ClassWrapperMacros.getTypeWrapper(ClassWrapperMacros.parseClassType(cl));
         return macro $i{wrapper}.getObject($L, $idx);
     }
+
+    #if macro
+    /**
+     * Substitute one type to another when parsing the fields of types or parameters.
+     * 
+     * This must be called from an initialization macro. The replacement type also
+     * must satisfy these requirements, lest it throw an error:
+     * 1. It must be an abstract over the source type.
+     * 2. Implicit conversions to/from the types must be possible.
+     * @param srcType The type that will be substituted.
+     * @param dstType The type that will be the substitute.
+     */
+    public static function registerTypeSubstitute(srcType:String, dstType:String) {
+        ClassWrapperMacros.registerSubstitute(srcType, dstType);
+    }
+    #end
 }
