@@ -15,7 +15,7 @@ package testpkg;
 // }
 
 @:luaExpose
-abstract LuaStringArray(Array<String>) {
+abstract LuaStringArray(Array<String>) from Array<String> to Array<String> {
     public inline function new() {
         this = [];
     }

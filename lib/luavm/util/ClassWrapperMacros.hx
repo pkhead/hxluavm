@@ -22,6 +22,7 @@ typedef FieldParserData = {
 
 class ClassWrapperMacros {
     #if macro
+    static var substitutes:Map<String, String> = [];
     static var typeWrappers:Map<String, TypeDefinition> = [];
 
     static function typeErr(typeName:String, pos:Position):Dynamic {
@@ -312,6 +313,13 @@ class ClassWrapperMacros {
 
     public static function getTypeWrapper(t:ComplexType) {
         var fullName = ComplexTypeTools.toString(t);
+        {
+            var subStr = substitutes[fullName];
+            if (subStr != null) {
+                t = TypeTools.toComplexType(Context.getType(subStr));
+                fullName = subStr;
+            }
+        }
 
         var typeWrapper = typeWrappers[fullName];
         var typeWrapperClassName = "LuaClassWrapper__" + StringTools.replace(fullName, ".", "_");
@@ -643,6 +651,20 @@ class ClassWrapperMacros {
     public static function pushMetatable(L:Expr, t:Expr):Expr {
         var wrapper = getTypeWrapper(parseClassType(t));
         return macro $i{wrapper}.pushMetatable($L);
+    }
+
+    /**
+     * Substitute one type to another when parsing the fields of types or parameters.
+     * 
+     * This must be called from an initialization macro. The replacement type also
+     * must satisfy these requirements, lest it throw an error:
+     * 1. It must be an abstract over the source type.
+     * 2. Implicit conversions to/from the types must be possible.
+     * @param srcType The type that will be substituted.
+     * @param dstType The type that will be the substitute.
+     */
+    public static function registerSubstitute(srcType:String, dstType:String) {
+        substitutes[srcType] = dstType;
     }
     #end
 }
