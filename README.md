@@ -80,6 +80,7 @@ It provides these functions:
 - `pushObject<T>(L:luavm.State, v:T):Void`, to push an object of type T to the Lua stack.
 - `pushClass<T>(L:luavm.State, v:Class<T>):Void`, to push the static class wrapper for type T to the Lua stack.
 - `pushMetatable<T>(L:luavm.State, v:Class<T>):Void`, to push the metatable for type T. This can be used to override/add metamethods.
+- `registerTypeSubstitute(fromType:String, toType:String):Void` to be called in an initialization macro to substitute one type for another when building Lua wrappers.
 
 It also provides these compiler metadatas for guiding the wrapper generation process:
 - `@:luaExpose`:
