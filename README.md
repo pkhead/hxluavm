@@ -86,6 +86,6 @@ It also provides these compiler metadatas for guiding the wrapper generation pro
 - `@:luaExpose`:
     - **class**: Put this on a class to signify the generator can wrap around this. If not, it will throw an error on any attempts to process this class type.
     - **field**: By default, private fields will be hidden. Use this to force it to be exposed.
-- `@:luaName(nm:String)`: Put this on a field to set the name of the field on the Lua side. If not specified, it will use the name of the Haxe field.
+- `@:luaName(nm:String)`: Put this on a field to set the name of the field on the Lua side. If not specified, it will use the name of the field directly.
 - `@:luaHide` Do not expose this field to Lua.
-- `@:luaCatch` If an exception occurs while accessing this field, throw a Lua error.
+- `@:luaCatch` Internally wrap access to this field in a try/catch. If an exception occurs, raise a Lua error.
