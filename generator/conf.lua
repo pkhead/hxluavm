@@ -257,17 +257,9 @@ conf.exposed_structs = {
 
 conf.hx_lua_bindings = [[package luavm;
 import haxe.Constraints.Function;
-import luavm.GcOptions;
-import luavm.LuaType;
 import luavm.State;
-import luavm.ThreadStatus;
 import luavm.CString;
-
-typedef CFunction = State->Int;
-typedef KFunction = (State,Int,NativePtr)->Int;
-typedef Hook = (State,DebugPtr)->Void;
-typedef Reader = (State,NativePtr,NativePtr)->NativePtr;
-// typedef Writer = (State,NativePtr,NativeUInt,NativePtr)->Int;
+import luavm.Lua;
 
 enum FunctionType {
     CFunction;
@@ -301,12 +293,82 @@ $<HL>
 ]]
 
 conf.hx_lua_wrapper = [[package luavm;
-import luavm.GcOptions;
-import luavm.LuaType;
 import luavm.State;
-import luavm.ThreadStatus;
 import luavm.LuaNative;
 import luavm.CString;
+
+enum abstract ThreadStatus(Int) {
+	var Something = -1;
+	var Ok = 0;
+	var Yield;
+	var ErrRun;
+	var ErrSyntax;
+	var ErrMem;
+	var ErrErr;
+}
+
+enum abstract GcOptions(Int) from Int to Int {
+	var GcStop = 0;
+	var GCRestart = 1;
+	var GcCollect = 2;
+	var GcCount = 3;
+	var GcCountB = 4;
+	var GcStep = 5;
+	var GcSetPause = 6;
+	var GcSetStepMul = 7;
+	var GcIsRunning = 9;
+
+	@:to inline function toInt():Int {
+        return this;
+    }
+}
+
+enum abstract HookEvent(Int) from Int to Int {
+    var HookCall = 0;
+    var HookRet = 1;
+    var HookLine = 2;
+    var HookCount = 3;
+    var HookTailCall = 4;
+
+    @:to inline function toInt():Int {
+        return this;
+    }
+}
+
+enum abstract LuaType(Int) from Int to Int {
+	var TNone = -1;
+	var TNil = 0;
+	var TBoolean = 1;
+	var TLightUserData = 2;
+	var TNumber = 3;
+	var TString = 4;
+	var TTable = 5;
+	var TFunction = 6;
+	var TUserdata = 7;
+	var TThread = 8;
+
+	@:to inline function toInt():Int {
+        return this;
+    }
+}
+
+enum abstract HookMask(Int) from Int to Int {
+    var HookCall = 0;
+    var HookRet = 1;
+    var HookLine = 2;
+    var HookCount = 3;
+    var HookTailCall = 4;
+
+    @:to inline function toInt():Int {
+        return this;
+    }
+}
+
+typedef CFunction = State->Int;
+typedef KFunction = (State,Int,NativePtr)->Int;
+typedef Hook = (State,DebugPtr)->Void;
+typedef Reader = (State,NativePtr,NativePtr)->NativePtr;
+// typedef Writer = (State,NativePtr,NativeUInt,NativePtr)->Int;
 
 class Lua {
     private static var _registryIndex:Int;

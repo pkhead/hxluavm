@@ -1,6 +1,7 @@
 package luavm.util;
 
 import luavm.LuaNative;
+import luavm.Lua;
 
 /**
  * Utility class for pushing Haxe functions.

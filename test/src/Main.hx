@@ -1,10 +1,8 @@
 // import luavm.Lua;
 import testpkg.LuaStringArray;
-import luavm.HookMask;
 import luavm.LuaNative;
 import luavm.Lua;
 import luavm.State;
-import luavm.ThreadStatus;
 import luavm.util.FuncHelper;
 import luavm.util.ClassWrapper;
 
@@ -118,9 +116,6 @@ class Main {
     // }
 
     static function tests2(L:luavm.State) {
-        // Macros.test();
-        // var testMap:Map<LuaStringArray, Int> = [];
-        // trace(testMap);
         ClassWrapper.pushMetatable(L, LuaStringArray);
 
         // override __index
@@ -186,6 +181,10 @@ class Main {
         ClassWrapper.pushClass(L, testpkg.LuaStringArray);
         Lua.setglobal(L, "StringArray");
     }
+
+    // static function test3(L:luavm.State) {
+    //     ClassWrapper.pushMetatable(L, LuaArray<String>);
+    // }
 
     public static function main1() {
         Lua.init(() -> {            

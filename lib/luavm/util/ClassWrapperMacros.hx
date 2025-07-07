@@ -573,7 +573,7 @@ class ClassWrapperMacros {
                 }
 
                 static function getOrInitMetatable(L:luavm.State) {
-                    if (luavm.Lua.getfield(L, luavm.Lua.REGISTRYINDEX, $v{mtName}) == cast luavm.LuaType.TNil) {
+                    if (luavm.Lua.getfield(L, luavm.Lua.REGISTRYINDEX, $v{mtName}) == cast luavm.Lua.LuaType.TNil) {
                         luavm.Lua.pop(L, 1);
                         init(L);
                     }
