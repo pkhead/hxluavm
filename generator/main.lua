@@ -1,20 +1,43 @@
-local native_lib_name, lua_src_path, CC = ...
+_G.ARGS = {}
 
-if not native_lib_name then
-    error("native lib name (first argument) must be specified!")
+-- argument processing
+do
+    local has_errors = false
+
+    for i, arg in ipairs({...}) do
+        local eq_index = string.find(arg, "=", 1, true)
+        if not eq_index then
+            print(("argument %i: arguments must be in the format KEY=VALUE"):format(i))
+            has_errors = true
+        else
+            ARGS[string.lower(string.sub(arg, 1, eq_index - 1))] = string.sub(arg, eq_index + 1)
+        end
+    end
+
+    if has_errors then
+        os.exit(2)
+    end
 end
 
-if not lua_src_path then
-    error("lua include path (second argument) must be specified!")
+if not ARGS.output_lib_name then
+    error("OUTPUT_LIB_NAME argument must be specified!")
 end
 
-if not CC then
-    error("path to gcc/clang (third argument) must be specified!")
+if not ARGS.lua_version then
+    error("LUA_VERSION argument must be specified!")
 end
 
-local luah_path = lua_src_path .. "/lua.h"
-local lualibh_path = lua_src_path .. "/lualib.h"
-local lauxlibh_path = lua_src_path .. "/lauxlib.h"
+if not ARGS.lua_include then
+    error("LUA_INCLUDE path argument must be specified!")
+end
+
+if not ARGS.cc then
+    error("CC argument must be specified! ")
+end
+
+local luah_path = ARGS.lua_include .. "/lua.h"
+local lualibh_path = ARGS.lua_include .. "/lualib.h"
+local lauxlibh_path = ARGS.lua_include .. "/lauxlib.h"
 
 require("generator.util")
 local conf = require("generator.conf")
@@ -41,7 +64,7 @@ do
     local structs = {}
     
     -- print("processing " .. luah_path)
-    cparser.parse_file(funcs, structs, StringStream.new(cparser.read_headers(CC, luah_path, lauxlibh_path, lualibh_path)))
+    cparser.parse_file(funcs, structs, StringStream.new(cparser.read_headers(ARGS.cc, luah_path, lauxlibh_path, lualibh_path)))
 
     if conf.c_header_extra then
         print("processing c_header_extra")
@@ -253,7 +276,7 @@ do
             end
 
             if target == "hl" then
-                tinsert(hx_bindings_source, ("    @:hlNative(\"%s\", \""):format(native_lib_name))
+                tinsert(hx_bindings_source, ("    @:hlNative(\"%s\", \""):format(ARGS.output_lib_name))
                 tinsert(hx_bindings_source, export_name)
                 tinsert(hx_bindings_source, "\")\n")
             end

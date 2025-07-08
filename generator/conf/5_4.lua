@@ -164,19 +164,6 @@ return luaL_error(L, msg);
 ]]
     },
 
---     lua_pushlstring = {
---         ret = "const char*",
---         args = {
---             { "lua_State*", "L" },
---             { "const char*", "s" },
---             { "unsigned int", "len" }
---         },
---         impl =
---         [[
---     return lua_pushlstring(L, s, (size_t)len);
--- ]]
---     },
-
     lua_gc = {
         ret = "int",
         args = {
@@ -194,59 +181,6 @@ return luaL_error(L, msg);
     return lua_gc(L, what);
 ]]
     },
-
---     lua_newuserdatauv = {
---         ret = "void*",
---         args = {
---             { "lua_State*", "L" },
---             { "unsigned int", "sz" },
---             { "int", "nuvalue" }
---         },
---         impl =
---         [[
---     return lua_newuserdatauv(L, (size_t)sz, nuvalue);
--- ]]
---     },
-
-    -- luaL_loadbufferx = {
-    --     ret = "int",
-    --     args = {
-    --         { "lua_State*", "L" },
-    --         { "const char*", "buff" },
-    --         { "unsigned int", "sz" },
-    --         { "const char*", "name" },
-    --         { "const char*", "mode" }
-    --     },
-    --     impl = [[
-    --         size_t _sz = (size_t)sz;
-    --         return luaL_loadbufferx(L, buff, _sz, name, mode);
-    --     ]]
-    -- },
-
-    -- luaL_checkversion_ = {
-    --     ret = "void",
-    --     args = {
-    --         { "lua_State*", "L" },
-    --         { "lua_Number", "ver" },
-    --         { "unsigned int", "sz" }
-    --     },
-    --     impl = [[
-    --         size_t _sz = (size_t)sz;
-    --         luaL_checkversion_(L, ver, _sz);
-    --     ]]
-    -- },
-
-    -- lua_stringtonumber = {
-    --     ret = "unsigned int",
-    --     args = {
-    --         { "lua_State*", "L" },
-    --         { "const char*", "s" }
-    --     },
-    --     impl = [[
-    --         size_t ret = lua_stringtonumber(L, s);
-    --         return (unsigned int)ret;
-    --     ]]
-    -- }
 }
 
 conf.exposed_structs = {
@@ -563,6 +497,18 @@ $<HL>
 
     public static inline function pushboolean(L:State, b:Bool):Void {
         LuaNative.lua_pushboolean(L, b ? 1 : 0);
+    }
+    
+    public static inline function newuserdata(L:State, size:Int) {
+        return LuaNative.lua_newuserdatauv(L, size, 1);
+    }
+
+    public static inline function getuservalue(L:State, index:Int) {
+        return LuaNative.lua_getiuservalue(L, index, 1);
+    }
+
+    public static inline function setuservalue(L:State, index:Int) {
+        return LuaNative.lua_setiuservalue(L, index, 1);
     }
 
     public static inline function isfunction(L:State, idx:Int) return LuaNative.lua_type(L, idx) == cast LuaType.TFunction;
