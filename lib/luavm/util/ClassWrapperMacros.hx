@@ -392,6 +392,7 @@ class ClassWrapperMacros {
     static function luaIndexClassField(field:ClassField, cases:Array<Case>, setup:FieldParserData) {
         if (field.meta.has(":luaHide")) return;
         var fieldName = field.name;
+        // trace('INDEX FIELD\t\t${field.name}: ${TypeTools.toString(field.type)}');
 
         if (setup.isAbstract && fieldName == "_new")
             fieldName = "new";
@@ -511,6 +512,8 @@ class ClassWrapperMacros {
     static function luaNewIndexClassField(field:ClassField, cases:Array<Case>, setup:FieldParserData) {
         if (field.meta.has(":luaHide")) return;
         var fieldName = field.name;
+        // trace('NEW INDEX FIELD:\t${field.name}:${TypeTools.toString(field.type)}');
+
         var caseValue = macro $v{getFieldName(field)};
 
         var classPos = setup.classPos;
@@ -672,11 +675,6 @@ class ClassWrapperMacros {
                             // is named "this"
                             switch (field.kind) {
                                 case FMethod(_):
-                                    if (field.expr() == null) {
-                                        trace(field);
-                                        trace("IT's NULL.");
-                                    }
-                                    
                                     switch (field.expr().t) {
                                         case TFun(funcArgs, ret):
                                             if (funcArgs.length < 1 || funcArgs[0].name != "this") {
@@ -745,9 +743,7 @@ class ClassWrapperMacros {
 
                 @:access($whyDoesntPrivateAccessWorkINeedToDoThisInstead)
                 static function luaNewIndex(L:luavm.State):Int {
-                    var udPtr = luavm.Lua.l_checkudata(L, 1, $v{mtName});
-                    var id = udPtr.getI32(0);
-                    var self = wrapIDs[id];
+                    var self = getObject(L, 1);
                     var key = luavm.Lua.l_checkstring(L, 2);
 
                     $e{newIndexSwitch};
@@ -863,6 +859,9 @@ class ClassWrapperMacros {
 
                 return null;
             });
+
+            // var printer = new haxe.macro.Printer();
+            // trace(printer.printTypeDefinition(typeWrapper));
 
             typeWrappers[fullName] = typeWrapper;
         }
