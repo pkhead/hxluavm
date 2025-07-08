@@ -444,9 +444,9 @@ class ClassWrapperMacros {
                                 Context.error("Lua: all optional arguments must be at the end", field.pos);
                             }
 
-                            var argName = arg.name;
-                            funcDef.push(macro var $argName = $e{luaGetValue(arg.t, macro $v{stackIndex++})});
-                            callArgs.push(macro $i{arg.name});
+                            var varName = "__" + arg.name;
+                            funcDef.push(macro var $varName = $e{luaGetValue(arg.t, macro $v{stackIndex++})});
+                            callArgs.push(macro $i{varName});
                         }
 
                         if (fieldName == "new") {
