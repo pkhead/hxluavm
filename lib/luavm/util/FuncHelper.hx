@@ -80,7 +80,7 @@ class FuncHelper {
      * @param func The CFunction to push.
      */
     public static function push(L:luavm.State, func:luavm.State->Int) {
-        var ptr = LuaNative.lua_newuserdatauv(L, 4, 1);
+        var ptr = Lua.newuserdata(L, 4);
         ptr.setI32(0, nextId);
         funcMap[nextId] = func;
         nextId++;
@@ -101,7 +101,7 @@ class FuncHelper {
      * @param func The CFunction to push.
      */
     public static function pushClosure(L:luavm.State, upvalues:Int, func:luavm.State->Int) {
-        var ptr = LuaNative.lua_newuserdatauv(L, 4, 1);
+        var ptr = Lua.newuserdata(L, 4);
         ptr.setI32(0, nextId);
         funcMap[nextId] = func;
         nextId++;

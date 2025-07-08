@@ -828,7 +828,7 @@ class ClassWrapperMacros {
                     if (cache != null) {
                         luavm.Lua.rawgeti(L, luavm.Lua.REGISTRYINDEX, cache);
                     } else {
-                        var udPtr = luavm.LuaNative.lua_newuserdatauv(L, 4, 1);
+                        var udPtr = luavm.Lua.newuserdata(L, 4);
                         udPtr.setI32(0, nextId);
                         wrapIDs[nextId] = cast v;
                         
