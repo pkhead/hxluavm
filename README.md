@@ -6,7 +6,7 @@ Currently only tested on Lua 5.4. The generator, aside from the configuration fi
 ## Compiling
 Requirements:
 - GNU Make
-- Lua 5.4+ interpreter
+- Lua 5.3+ interpreter
 - GCC-compatible C compiler
 - Emscripten compiler, if you want to build for the JS target.
 

@@ -71,7 +71,7 @@ local function tokenize_c_line(stream, pos)
     while not stream:eof() do
         while stream:readchar() == preproc_symbol do
             flush()
-            stream:skip(2)
+            stream:skip(1)
 
             local preproc_data = {}
             local is_in_str = false
@@ -79,8 +79,10 @@ local function tokenize_c_line(stream, pos)
             while true do
                 local c = stream:popchar()
                 if not is_in_str and (c == 10 or c == 32) then
-                    tinsert(preproc_data, table.concat(tmpbuf))
-                    tmpbuf = {}
+                    if #tmpbuf > 0 then
+                        tinsert(preproc_data, table.concat(tmpbuf))
+                        tmpbuf = {}
+                    end
 
                     if c == 10 then
                         break
@@ -94,8 +96,14 @@ local function tokenize_c_line(stream, pos)
                 end
             end
 
-            pos.line = tonumber(preproc_data[1]) --[[@as integer]]
-            pos.file = string.sub(preproc_data[2], 2, -2)
+            if preproc_data[1] ~= "pragma" then
+                pos.line = tonumber(preproc_data[1]) --[[@as integer]]
+                pos.file = string.sub(preproc_data[2], 2, -2)
+            end
+
+            if stream:eof() then
+                goto loop_end
+            end
         end
 
         if depth == 0 and stream:read(1) == ";" then
@@ -171,7 +179,7 @@ end
 
 local function assert_type(tok, type, msg)
     if tok.type ~= type then
-        error(("%s:%i: %s"):format(tok.file, tok.line, msg or ("expected " .. type)), 2)
+        error(("%s:%i: %s"):format(tok.file, tok.line, msg or ("expected %s, got %s '%s'"):format(type, tok.type, tok.str)), 2)
     end
 end
 
@@ -206,6 +214,45 @@ local function parse_type_name(tokens, index)
     return table.concat(tmp), index
 end
 
+local extension_markers = {
+    "__inline__",
+    "__extension__",
+    "__attribute__",
+}
+
+local function skip_any_extensions(tokens, index)
+    local safe = false
+    while true do
+        safe = not (
+            tokens[index].type == "word" and table.find(extension_markers, tokens[index].str)
+        )
+
+        if safe then
+           break 
+        else
+            index=index+1
+
+            -- skip any parenthesized stuff
+            if token_check(tokens[index], "symbol", "(") then
+                local paren_depth = 1
+                index=index+1
+
+                while paren_depth > 0 do
+                    if token_check(tokens[index], "symbol", "(") then
+                        paren_depth=paren_depth+1
+                    elseif token_check(tokens[index], "symbol", ")") then
+                        paren_depth=paren_depth-1
+                    end
+
+                    index=index+1
+                end
+            end
+        end
+    end
+
+    return index
+end
+
 local function parse_c_funcdef(tokens)
     if tokens[1] == nil or not token_check(tokens[1], "word", "extern") then
         return nil
@@ -214,7 +261,9 @@ local function parse_c_funcdef(tokens)
     local output = {}
     local index = 2
 
+    index = skip_any_extensions(tokens, index)
     output.ret, index = parse_type_name(tokens, index)
+    index = skip_any_extensions(tokens, index)
     -- print(output.ret)
 
     local func_name_in_paren = token_check(tokens[index], "symbol", "(")
@@ -423,7 +472,6 @@ function cparser.parse_struct(structdef, native_size)
 end
 
 local function parse_file(funcs, structs, stream)
-    -- local test_file <close> = assert(io.open("test.c", "w"))
     local pos = {
         line = -1,
         file = "?"
@@ -457,7 +505,8 @@ function cparser.read_headers(cc, ...)
     local tmpout = os.tmpname()
 
     -- invoke C preprocessor
-    local cmd = ("\"%s\" -E - > \"%s\""):format(cc, tmpout)
+    local cmd = ("%s -E - -o %s"):format(cc, tmpout)
+    print(cmd)
     local cpp = assert(io.popen(cmd, "w"), ("could not run \"%s\""):format(cmd))
     for _, p in ipairs({...}) do
         cpp:write("#include \"")
@@ -467,8 +516,9 @@ function cparser.read_headers(cc, ...)
     cpp:flush()
     cpp:close()
 
-    local f <close> = assert(io.open(tmpout, "r"), "could not open " .. tmpout)
-    local out = f:read("a")
+    local f = assert(io.open(tmpout, "r"), "could not open " .. tmpout)
+    local out = f:read("*a")
+    f:close()
     os.remove(tmpout)
 
     return out

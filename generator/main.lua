@@ -48,9 +48,9 @@ do
         cparser.parse_file(funcs, structs, StringStream.new(conf.c_header_extra))
     end
 
-    local output_hlc_file <close> = assert(io.open("hlexport.c", "w"), "could not open hlexport.c")
-    local output_wasmc_file <close> = assert(io.open("wasmexport.c", "w"), "could not open wasmexport.c")
-    local output_hx_bindings_file <close> = assert(io.open("lib/luavm/LuaNative.hx", "w"), "could not open lib/luavm/LuaNative.hx")
+    local output_hlc_file = assert(io.open("hlexport.c", "w"), "could not open hlexport.c")
+    local output_wasmc_file = assert(io.open("wasmexport.c", "w"), "could not open wasmexport.c")
+    local output_hx_bindings_file = assert(io.open("lib/luavm/LuaNative.hx", "w"), "could not open lib/luavm/LuaNative.hx")
 
     output_hlc_file:write([[#define HL_NAME(n) luahl_##n
 
@@ -624,12 +624,18 @@ do
     --     output_hx_bindings_file:write(conf.raw_haxe)
     -- end
 
-    local output_hx_wrapper_file <close> = assert(io.open("lib/luavm/Lua.hx", "w"), "could not open Lua.hx")
+    local output_hx_wrapper_file = assert(io.open("lib/luavm/Lua.hx", "w"), "could not open Lua.hx")
     local hx_wrapper_content = conf.hx_lua_wrapper
         :gsub("$<JS>", table.concat(hx_js_wrapper_content))
         :gsub("$<HL>", table.concat(hx_hl_wrapper_content))
     
     output_hx_wrapper_file:write(hx_wrapper_content)
+
+    output_hx_wrapper_file:close()
+    output_hlc_file:close()
+    output_wasmc_file:close()
+    output_hx_bindings_file:close()
+
     -- local stream = StringStream.new("LUA_API void	       *(lua_touserdata) (lua_State *L, int idx);")
 
     

@@ -12,7 +12,8 @@ for i=1, #arr do
     print(i, arr[i])
 end
 
-local class = TestClass.new(arr)
-print(#class.array)
-class.array = nil
-print(class.number)
+print(TestClass.new(arr, "enumFoo"))
+-- local class = TestClass.new(arr)
+-- print(#class.array)
+-- class.array = nil
+-- print(class.number)
