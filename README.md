@@ -1,7 +1,11 @@
 # luavm
 Helper repository for compiling and using the Lua VM for the HashLink and JavaScript targets. It uses a Lua script to generate a C source and Haxe bindings for a HashLink .hdll or a WebAssembly module.
 
-Currently only tested on Lua 5.4. The generator, aside from the configuration file, is mostly version-agnostic, but I haven't tried compiling a different version of Lua.
+Supported versions:
+- Lua 5.3
+- Lua 5.4
+
+You may add support for different versions of Lua by creating a configuration file in generator/conf.
 
 ## Compiling
 Requirements:
@@ -20,6 +24,7 @@ Requirements:
 # make lua54.hdll
 make hl \
     LIB_NAME=lua54 \
+    LUA_VERSION=5_4 \
     LUA_INCLUDE=<lua source directory> \
     LUA_SOURCES=<list of lua source files> \
     LUA=<lua interpreter command>
@@ -35,6 +40,7 @@ make install
 # make lua54.wasm and lua54.js
 make wasm \
     LIB_NAME=lua54 \
+    LUA_VERSION=5_4 \
     LUA_INCLUDE=<lua source directory> \
     LUA_SOURCES=<list of lua source files> \
     LUA=<lua interpreter command> \
@@ -89,3 +95,12 @@ It also provides these compiler metadatas for guiding the wrapper generation pro
 - `@:luaName(nm:String)`: Put this on a field to set the name of the field on the Lua side. If not specified, it will use the name of the field directly.
 - `@:luaHide` Do not expose this field to Lua.
 - `@:luaCatch` Internally wrap access to this field in a try/catch. If an exception occurs, raise a Lua error.
+
+With respect to enums, the default behavior is to error when attempting to parse an enum type. However, you can configure how ClassWrapper handles enum types by defining `-D luawrap-enums=X`, where X is one of several configuration options. With this enabled, enum variants in Lua will be represented by either the name of the enum variant as a string, or the enum variant's integer index. The define has several configuration options:
+- `luawrap-enums=pascal`: Use the name enum variants, in `PascalCase`.
+- `luawrap-enums=camel`: Use the name enum variants, in `camelCase`.
+- `luawrap-enums=kebab`: Use the name enum variants, in `kebab-case`.
+- `luawrap-enums=snake`: Use the name enum variants, in `snake_case`.
+- `luawrap-enums=flat`: Use the name enum variants, in `flatcase`.
+- `luawrap-enums=int0`: Use the index of enum variants, indexed from 0.
+- `luawrap-enums=int0`: Use the index of enum variants, indexed from 1.
