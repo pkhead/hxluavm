@@ -25,14 +25,95 @@ class ClassWrapperMacros {
     static var substitutes:Map<String, String> = [];
     static var typeWrappers:Map<String, TypeDefinition> = [];
 
+    static function isSimpleEnum(t:EnumType) {
+        for (name => ctor in t.constructs) {
+            if (ctor.type.match(TFun(_, _))) return false;
+        }
+
+        return true;
+    }
+
+    static function complexTypeToFieldExprArray(t:ComplexType):Array<String> {
+        switch (t) {
+            case TPath(path):
+                var arr = path.pack.copy();
+                if (path.sub != null) {
+                    arr.push(path.name);
+                    arr.push(path.sub);
+                } else {
+                    arr.push(path.name);
+                }
+        
+                return arr;
+            
+            default: throw new haxe.Exception("could not convert complex type to field expr");
+        }
+    }
+
+    static function complexTypeToFieldExpr(t:ComplexType):Expr {
+        return macro $p{complexTypeToFieldExprArray(t)};
+    }
+
     static function typeErr(typeName:String, pos:Position):Dynamic {
-        return Context.error('ClassWrapper does not support $typeName type for a class field.', pos);
+        throw new haxe.Exception('ClassWrapper does not support the $typeName type.');
+        // return Context.error('ClassWrapper does not support the $typeName type.', pos);
     }
 
     static function isPrimitive(typeStr:String) {
         return switch (typeStr) {
             case "Int" | "Float" | "Single" | "Bool": true;
             default: false;
+        }
+    }
+
+    // assumes src is in PascalCase or camelCase
+    static function convertCasing(src:String, behavior:String):String {
+		function splitByCase(src:String) {
+			var upper = src.toUpperCase();
+			var arr:Array<String> = [];
+			var buf = new StringBuf();
+
+			for (i in 0...src.length) {
+				var ch = src.charCodeAt(i);
+				if (i > 0 && ch == upper.charCodeAt(i) && src.charCodeAt(i - 1) != upper.charCodeAt(i - 1)) {
+					arr.push(buf.toString().toLowerCase());
+					buf = new StringBuf();
+					buf.addChar(ch);
+				} else {
+					buf.addChar(ch);
+				}
+			}
+
+			arr.push(buf.toString().toLowerCase());
+			return arr;
+		}
+
+        return switch (behavior) {
+            case "pascal":
+                if (src.length <= 1) {
+                    src.toUpperCase();
+                } else {
+                    src.substr(0, 1).toUpperCase() + src.substr(1);
+                }
+
+            case "camel":
+                if (src.length <= 1) {
+                    src.toLowerCase();
+                } else {
+                    src.substr(0, 1).toLowerCase() + src.substr(1);
+                }
+
+            case "kebab":
+                StringTools.replace(splitByCase(src).join("-"), "_", "-");
+            
+            case "snake":
+                splitByCase(src).join("_");
+
+            case "flat":
+                src.toLowerCase();
+
+            default: Context.fatalError("Invalid casing rule " + behavior, Context.currentPos());
+            // default: throw new haxe.Exception("invalid casing rule " + behavior);
         }
     }
 
@@ -55,16 +136,60 @@ class ClassWrapperMacros {
             }
             #end
 
-            return macro {
-                var tmp = $e{v};
-                if (tmp == null) {
-                    luavm.Lua.pushnil(L);
-                } else {
-                    $e{switch (TypeTools.toString(type)) {
-                        case "String": macro luavm.Lua.pushstring(L, tmp);
-                        default: macro luavm.util.ClassWrapper.pushObject(L, tmp);
-                    }}
-                }
+            switch (type) {
+                case TEnum(enumTypeRef, params):
+                    var enumBehavior = Context.definedValue("luawrap-enums");
+                    if (enumBehavior == null) {
+                        return Context.error(
+                            'Cannot wrap type ${TypeTools.toString(type)}, as luawrap-enums is not defined.',
+                            enumTypeRef.get().pos
+                        );
+                    } else {
+                        var enumType = enumTypeRef.get();
+
+                        if (!isSimpleEnum(enumType)) {
+                            Context.error(
+                                'Cannot wrap type ${TypeTools.toString(type)}, as it has one or more parameterized constructors.',
+                                enumType.pos
+                            );
+                        }
+
+                        return switch ((enumBehavior : String)) {
+                            case "int0":
+                                macro luavm.Lua.pushinteger(L, Type.enumIndex($v));
+
+                            case "int1":
+                                macro luavm.Lua.pushinteger(L, Type.enumIndex($v) + 1);
+
+                            default:
+                                var convertCases:Array<Case> = [
+                                    for (name in enumType.names) {
+                                        {
+                                            values: [macro $i{name}],
+                                            expr: macro luavm.Lua.pushstring(L, $v{convertCasing(name, enumBehavior)})
+                                        }
+                                    }
+                                ];
+
+                                {
+                                    pos: Context.currentPos(),
+                                    expr: ESwitch(value, convertCases, null)
+                                }
+                        }
+                    }
+                
+                default:
+                    return macro {
+                        var tmp = $e{v};
+                        if (tmp == null) {
+                            luavm.Lua.pushnil(L);
+                        } else {
+                            $e{switch (TypeTools.toString(type)) {
+                                case "String": macro luavm.Lua.pushstring(L, tmp);
+                                default: macro luavm.util.ClassWrapper.pushObject(L, tmp);
+                            }}
+                        }
+                    }
             }
         }
 
@@ -106,6 +231,9 @@ class ClassWrapperMacros {
                 
                 case TInst(tr, params):
                     pushNonPrimitive(typeArg, value);
+                
+                case TEnum(_, _):
+                    pushNonPrimitive(typeArg, value);
 
                 case v: typeErr(TypeTools.toString(v), Context.currentPos());
             };
@@ -135,21 +263,77 @@ class ClassWrapperMacros {
             }
             #end
 
-            return macro {
-                if (luavm.Lua.isnoneornil(L, $stackIndex)) {
-                    null;
-                } else {
-                    $e{switch (TypeTools.toString(type)) {
-                        case "String": macro luavm.Lua.l_checkstring(L, $stackIndex);
-                        default:
-                            var complexType = TypeTools.toComplexType(
-                                // TInst(type, params)
-                                type
-                            );
-                            var className = getTypeWrapper(complexType);
+            switch (type) {
+                case TEnum(enumTypeRef, params):
+                    var enumBehavior = Context.definedValue("luawrap-enums");
+                    if (enumBehavior == null) {
+                        return Context.error(
+                            'Cannot wrap type ${TypeTools.toString(type)}, as luawrap-enums is not defined.',
+                            enumTypeRef.get().pos
+                        );
+                    } else {
+                        var enumType = enumTypeRef.get();
 
-                            macro $i{className}.getObject(L, $stackIndex);
-                    }}
+                        if (!isSimpleEnum(enumType)) {
+                            Context.error(
+                                'Cannot wrap type ${TypeTools.toString(type)}, as it has one or more parameterized constructors.',
+                                enumType.pos
+                            );
+                        }
+
+                        var eTypeArr = complexTypeToFieldExprArray(TypeTools.toComplexType(desiredType));
+                        var eType = macro $p{eTypeArr};
+                        return switch ((enumBehavior : String)) {
+                            case "int0":
+                                macro Type.createEnumIndex($eType, luavm.Lua.l_checkinteger(L, $stackIndex));
+                                
+                            case "int1":
+                                macro Type.createEnumIndex($eType, luavm.Lua.l_checkinteger(L, $stackIndex) - 1);
+
+                            default:
+                                var convertCases:Array<Case> = [
+                                    for (name in enumType.names) {
+                                        var fields = eTypeArr.copy();
+                                        fields.push(name);
+                                        {
+                                            values: [macro $v{convertCasing(name, enumBehavior)}],
+                                            expr: macro $p{fields}
+                                        }
+                                    }
+                                ];
+
+                                convertCases.push({
+                                    values: [macro v],
+                                    expr: macro return luavm.Lua.l_argerror(
+                                        L,
+                                        $stackIndex,
+                                        'invalid value \'$v\'. expected values: ' + $v{enumType.names.map(convertCasing.bind(_, enumBehavior)).join(", ")}
+                                    )
+                                });
+
+                                {
+                                    pos: Context.currentPos(),
+                                    expr: ESwitch(macro luavm.Lua.l_checkstring(L, $stackIndex), convertCases, null)
+                                }
+                        }
+                    }
+
+                default: return macro {
+                    if (luavm.Lua.isnoneornil(L, $stackIndex)) {
+                        null;
+                    } else {
+                        $e{switch (TypeTools.toString(type)) {
+                            case "String": macro luavm.Lua.l_checkstring(L, $stackIndex);
+                            default:
+                                var complexType = TypeTools.toComplexType(
+                                    // TInst(type, params)
+                                    type
+                                );
+                                var className = getTypeWrapper(complexType);
+        
+                                macro $i{className}.getObject(L, $stackIndex);
+                        }}
+                    }
                 }
             }
         }
@@ -178,6 +362,9 @@ class ClassWrapperMacros {
                     }
                 
                 case TInst(tr, params):
+                    getNonPrimitive(type);
+
+                case TEnum(_, _):
                     getNonPrimitive(type);
 
                 case TLazy(f): parse(f());
@@ -336,7 +523,6 @@ class ClassWrapperMacros {
                 
                 // report this value
                 macro $e{fieldExpr} = $e{luaGetValue(field.type, macro 3)};
-
                 
             default: null;
         }
@@ -444,7 +630,7 @@ class ClassWrapperMacros {
                     
                     // parse static fields
                     data.isStatic = true;
-                    data.objIdent = macro $p{fullName.split(".")};
+                    data.objIdent = complexTypeToFieldExpr(t);
                     for (field in ct.statics.get()) {
                         luaIndexClassField(field, staticIndexCases, data);
                         luaNewIndexClassField(field, staticNewIndexCases, data);
@@ -505,7 +691,7 @@ class ClassWrapperMacros {
 
                             if (isStatic) {
                                 data.isStatic = true;
-                                data.objIdent = macro $p{fullName.split(".")};
+                                data.objIdent = complexTypeToFieldExpr(t);
 
                                 luaIndexClassField(field, staticIndexCases, data);
                                 luaNewIndexClassField(field, staticNewIndexCases, data);
@@ -736,6 +922,46 @@ class ClassWrapperMacros {
      */
     public static function registerSubstitute(srcType:String, dstType:String) {
         substitutes[srcType] = dstType;
+    }
+
+    public static function lspInit() {
+        Compiler.registerCustomMetadata({
+            metadata: ":luaExpose",
+            doc: "- **type:** Put this on a type on signify that the generator may wrap this class. If not, it will throw an error on any attempt to process the class type.\n- **field:** By default, private fields will be hidden. Use this to force it to be exposed.",
+            targets: [AnyField, Abstract, Class]
+        });
+
+        Compiler.registerCustomMetadata({
+            metadata: ":luaName",
+            doc: "Set the name of the field on the Lua side.",
+            params: ["The name of the Lua field."],
+            targets: [AnyField]
+        });
+
+        Compiler.registerCustomMetadata({
+            metadata: ":luaHide",
+            doc: "Do not expose this field to Lua.",
+            targets: [AnyField]
+        });
+
+        Compiler.registerCustomMetadata({
+            metadata: ":luaCatch",
+            doc: "Internally wrap access to this field in a try/catch. If an exception occurs, a Lua error will be thrown instead of a Haxe exception.",
+            targets: [AnyField]
+        });
+
+        Compiler.registerCustomDefine({
+            define: "luawrap-enums",
+            doc: "Signal to the wrapper generator to interface enum types with strings. The enum must not have a constructor which takes parameters. You can also specify which casing rules it should apply to the strings.
+- **pascal:** `MyEnum`
+- **camel:** `myEnum`
+- **kebab:** `my-enum`
+- **snake:** `my_enum`
+- **flat:** `myenum`
+- **int0:** Use the index of the enum variant, starting from 0.
+- **int1:** Use the index of the enum variant, starting from 1.",
+            params: ["pascal", "camel", "kebab", "snake", "flat", "int0", "int1"]
+        });
     }
     #end
 }

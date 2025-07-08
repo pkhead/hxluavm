@@ -181,7 +181,7 @@ class Main {
         ClassWrapper.pushClass(L, testpkg.LuaStringArray);
         Lua.setglobal(L, "StringArray");
 
-        ClassWrapper.pushClass(L, testpkg.TestClass);
+        ClassWrapper.pushClass(L, testpkg.Module.TestClass);
         Lua.setglobal(L, "TestClass");
     }
 
