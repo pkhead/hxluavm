@@ -1,0 +1,23 @@
+option('python',
+    type : 'string',
+    value : 'python',
+    description : 'command to run Python 3')
+
+option('lua_include',
+    type : 'string',
+    description : 'path to lua source/include directory')
+
+option('hashlink_libs',
+    type : 'string',
+    value : '',
+    description : 'hashlink library path. set to empty string to search system paths only.')
+
+option('hashlink_include',
+    type : 'string',
+    value : '',
+    description : 'hashlink include path. set to empty string to search system paths only.')
+
+option('lib_name',
+    type : 'string',
+    value : 'lua',
+    description : 'name of the native library')

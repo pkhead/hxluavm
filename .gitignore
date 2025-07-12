@@ -11,3 +11,4 @@ wasmexport.c
 .DS_Store
 .vscode
 /build.sh
+/builddir

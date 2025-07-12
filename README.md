@@ -54,6 +54,23 @@ If you want to build the WASM without the Makefile, note that you must build it 
 -sMODULARIZE -sEXPORT_NAME=LuaVM -sALLOW_TABLE_GROWTH=1 -sEXPORTED_FUNCTIONS=_malloc,_free -sEXPORTED_RUNTIME_METHODS=addFunction,HEAPU8,HEAP32,HEAPU32
 ```
 
+### Using Meson
+Provided is a Meson build file for building the .hdll file with Meson. You will still need Make + GCC/Clang to run the generator (since it needs to use the preprocessor), and also additionally Python 3+, but this will allow you to use MSVC to compile the final .hdll. (I'm too lazy to install visual studio to make the vcxproj file)
+
+Once you have the prerequisities installed, run this to set up the Meson build directory:
+```bash
+meson setup builddir \
+    -Dlua_include=<lua source directory> \
+    -Dhashlink_libs=C:/HaxeToolkit/hashlink \
+    -Dhashlink_include=C:/HaxeToolkit/hashlink/include \
+    -Dlib_name=lua54
+```
+Replace each option with the correct values, depending on your system and HashLink install location. Then, to build the library, run:
+```bash
+meson compile -C builddir
+```
+This will create a lua54.dll and lua54.lib file in the build directory. Rename lua54.dll to lua54.hdll and install it to your computer. You may run `meson install -C builddir` to do so.
+
 ## Usage
 Register the library with `haxelib dev`, and then require the library in the .hxml like so:
 ```hxml

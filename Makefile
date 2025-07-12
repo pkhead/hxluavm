@@ -44,4 +44,4 @@ clean:
 	rm -f lib/luavm/Lua.hx
 	rm -f lib/luavm/LuaNative.hx
 
-.PHONY: clean install wasm hl gen
+.PHONY: all clean install wasm hl gen
